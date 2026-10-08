@@ -505,7 +505,7 @@ body.busy #dock{pointer-events:none;opacity:.55}
 </div>
 <div id="help" hidden role="dialog" aria-label="단축키">
   <div class="card">
-    <h3>⌨ 단축키 <small style="font-weight:400;color:var(--sub);font-size:11px">· 버전 10-08 16시</small></h3>
+    <h3>⌨ 단축키 <small style="font-weight:400;color:var(--sub);font-size:11px">· 버전 10-08 17시i</small></h3>
     <table>
       <tr><td><kbd>Space</kbd></td><td>재생 / 일시정지 (프리즈 중에는 계속 재생)</td></tr>
       <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>1프레임 이동 (<kbd>Shift</kbd> 누르면 10프레임)</td></tr>
@@ -1539,6 +1539,60 @@ function cleanTrack(tr,W,H){
         for(let q=i;q<j;q++){ if(!F[q]) continue; const w=(q-A)/(B-A); F[q][k]={x:pa.x+(pb.x-pa.x)*w,y:pa.y+(pb.y-pa.y)*w,v:Math.min(pa.v,pb.v)*.9,wx:pa.wx!=null&&pb.wx!=null?pa.wx+(pb.wx-pa.wx)*w:undefined,wy:pa.wx!=null&&pb.wx!=null?pa.wy+(pb.wy-pa.wy)*w:undefined,wz:pa.wx!=null&&pb.wx!=null?pa.wz+(pb.wz-pa.wz)*w:undefined}; } }
       else for(let q=i;q<j;q++) if(F[q]&&bad[q][k]) F[q][k].v=Math.min(F[q][k].v,.2);
       i=j; } }
+  // 4b) 가려진 팔 (등지고 차기·돌려차기 등): 몸에 가려진 팔을 AI가 추측해 벌어진 팔로 잡거나, 뒤 거울에 비친 팔을 잡는 것 방지
+  //     → 팔이 확실하지 않은 장면은, 가장 가까운 '팔이 잘 보인 장면'의 몸통 기준 팔 모양(어깨 기준 위치)을 그대로 유지해요
+  { const fps2=tr.fps||AFPS, RANGE=Math.round(2.5*fps2);
+    const ax=l=>{ if(!l) return null; const sm={x:(l[11].x+l[12].x)/2,y:(l[11].y+l[12].y)/2}, hm={x:(l[23].x+l[24].x)/2,y:(l[23].y+l[24].y)/2};
+      const T=Math.hypot(hm.x-sm.x,hm.y-sm.y); if(T<L*.3) return null; return {T,dy:{x:(hm.x-sm.x)/T,y:(hm.y-sm.y)/T}}; };
+    const ARMS=[[11,12,[13,15,17,19,21]],[12,11,[14,16,18,20,22]]];
+    // 차는 다리와 차기 종류 알아내기 (3D 좌표 기준): 발목이 높이 들린 다리 = 차는 다리, 다리가 몸 옆쪽으로 = 옆차기, 앞쪽으로 = 앞차기
+    const kickOf=i=>{ const l=F[i]; if(!l||[11,12,23,24,27,28].some(k=>l[k].wx==null)) return null;
+      const v3=p=>({x:p.wx,y:-p.wy,z:-p.wz}), Hm=VM.mul(VM.add(v3(l[23]),v3(l[24])),.5), Sm=VM.mul(VM.add(v3(l[11]),v3(l[12])),.5);
+      const up=VM.nrm(VM.sub(Sm,Hm)), lr=VM.nrm(VM.sub(v3(l[23]),v3(l[24]))), fr=VM.nrm(VM.cross(lr,up)), Tw=VM.len(VM.sub(Sm,Hm))||.4;
+      let best=null; [[23,27,'L'],[24,28,'R']].forEach(([hp,an,S])=>{ const d=VM.sub(v3(l[an]),v3(l[hp])), h=VM.dot(d,up)/Tw; if(h>-1.0&&(!best||h>best.h)) best={S,h,d}; }); // 발목이 엉덩이 아래 몸통 길이 이내로 올라옴
+      if(!best) return null; const side=Math.abs(VM.dot(best.d,lr))>Math.abs(VM.dot(best.d,fr));
+      return {leg:best.S,type:side?'side':'front'}; };
+    // 팔이 안 보일 때 놓는 기본자세 (보내 준 사진 기준)
+    //  · 차기(앞차기·옆차기)·기본: 주먹은 각각 자기 쪽 젖꼭지보다 살짝 아래 가슴 앞, 팔꿈치는 아래로 내려 옆구리에 붙임
+    //    (젖꼭지 = 가슴 가운데에서 어깨까지의 약 절반, 어깨선에서 몸통 길이의 약 1/3 아래)
+    //  · 허리 당김: 근처 장면에서 손이 허리에 있었을 때
+    const GP={front:{e:[.03,.6,.03,-.04],w:[.24,.33,.24,.3]}, sideUp:{e:[-.04,.36,-.05,-.08],w:[.48,.28,.48,.3]}, sideLow:{e:[-.02,.72,-.02,-.1],w:[.5,.9,.5,.24]}, waist:{e:[-.06,.55,-.05,-.12],w:[.12,.85,.12,.12]}};
+    const guardArm=(i,s,o,J,Bi,mode)=>{ const l=F[i], e=13+(s-11), w=15+(s-11), half=Math.hypot(l[o].x-l[s].x,l[o].y-l[s].y)/Bi.T, G=GP[mode]||GP.front;
+      // G.e/G.w = [안쪽(어깨 사이 비율), 아래(몸통 길이 비율), 3D 안쪽(어깨너비 비율), 3D 앞쪽(몸통 길이 비율)]
+      const at=([u,v])=>({x:Bi.S.x+(u*half*Bi.ex.x+v*Bi.ey.x)*Bi.T,y:Bi.S.y+(u*half*Bi.ex.y+v*Bi.ey.y)*Bi.T});
+      const pe=at(G.e), pw=at(G.w);
+      let we=null,ww=null; const S3=l[s],O3=l[o],H3=l[23],H4=l[24];
+      if(S3.wx!=null&&O3.wx!=null&&H3.wx!=null&&H4.wx!=null){ // 3D: 몸 앞쪽 방향을 구해 주먹은 몸 앞에
+        const v3=p=>({x:p.wx,y:-p.wy,z:-p.wz}), Ss=v3(S3), Os=v3(O3), Hm=VM.mul(VM.add(v3(H3),v3(H4)),.5), Sm=VM.mul(VM.add(Ss,Os),.5);
+        const lr=VM.nrm(s===11?VM.sub(Ss,Os):VM.sub(Os,Ss)), up=VM.nrm(VM.sub(Sm,Hm)), fr=VM.nrm(VM.cross(lr,up)), Tw=VM.len(VM.sub(Sm,Hm))||.4, inw=VM.nrm(VM.sub(Os,Ss)), sw=VM.len(VM.sub(Os,Ss));
+        const P3=(a,b,c)=>{ const q=VM.add(Ss,VM.add(VM.mul(inw,a*sw),VM.add(VM.mul(up,-b*Tw),VM.mul(fr,c*Tw)))); return {wx:q.x,wy:-q.y,wz:-q.z}; };
+        we=P3(G.e[2],G.e[1],G.e[3]); ww=P3(G.w[2],G.w[1],G.w[3]); }
+      const put=(k,p,w3,dx,dy)=>{ const q=l[k]; l[k]={x:p.x+dx,y:p.y+dy,v:.55,wx:w3?w3.wx:q.wx,wy:w3?w3.wy:q.wy,wz:w3?w3.wz:q.wz}; };
+      put(e,pe,we,0,0); put(w,pw,ww,0,0);
+      J.filter(k=>k>15&&k!==e&&k!==w).forEach(k=>put(k,pw,ww,(pw.x-pe.x)*.12,(pw.y-pe.y)*.12)); }; // 손가락 점은 주먹 근처
+    ARMS.forEach(([s,o,J])=>{
+      const basis=l=>{ const A=ax(l); if(!A) return null; const S=l[s],O=l[o], dx={x:O.x-S.x,y:O.y-S.y}, sw=Math.hypot(dx.x,dx.y); if(sw<.25*A.T) return null; // 옆모습(어깨가 겹침)은 기준을 못 세워요
+        return {S,ex:{x:dx.x/sw,y:dx.y/sw},ey:A.dy,T:A.T}; };
+      // 원래 인식값으로만 판단 (앞에서 메운 장면을 다시 기준으로 쓰면 메운 자세가 영상 끝까지 번져요)
+      const CF=F.map(l=>l?Math.min(l[13+(s-11)].v,l[15+(s-11)].v):0), BK=F.map(l=>!!(l&&l[0].v<.5&&l[7].v<.6&&l[8].v<.6)); // 얼굴이 안 보임 = 등지고 있음
+      const BAD=CF.map((c,i)=>c<.5||(BK[i]&&c<.85)), bad=i=>BAD[i];
+      for(let i=0;i<n;i++){ if(!F[i]||!bad(i)) continue; const Bi=basis(F[i]); if(!Bi) continue;
+        let j=-1; for(let d=1;d<=RANGE&&j<0;d++) for(const q of [i-d,i+d]) if(q>=0&&q<n&&F[q]&&!bad(q)&&basis(F[q])){ j=q; break; } // 앞 장면을 먼저 찾아요
+        // 팔이 잘 보인 장면이 가까이(0.6초 안) 없으면: 태권도에서 팔이 안 보일 땐 보통 주먹을 명치 앞(막기 자세)이나 허리에 당기고 있어요
+        if(j<0||Math.abs(i-j)>Math.round(.6*fps2)){
+          const kk=kickOf(i); let mode='front';
+          // 차기(앞차기·옆차기 모두): 주먹은 각각 자기 쪽 젖꼭지 살짝 아래 가슴 앞 — 옆차기는 몸이 옆으로 누워 화면에서 위아래로 보여요
+          if(!kk&&j>=0){ const Bj=basis(F[j]); if(Bj){ const W2=F[j][15+(s-11)]; if(((W2.x-Bj.S.x)*Bj.ey.x+(W2.y-Bj.S.y)*Bj.ey.y)/Bj.T>.6) mode='waist'; } } // 차지 않을 때, 근처에서 손이 허리였으면 허리
+          guardArm(i,s,o,J,Bi,mode); fixed++; continue; }
+        const Bj=basis(F[j]), det=Bj.ex.x*Bj.ey.y-Bj.ex.y*Bj.ey.x; if(Math.abs(det)<.2) continue;
+        J.forEach(k=>{ const P=F[j][k], rx=(P.x-Bj.S.x)/Bj.T, ry=(P.y-Bj.S.y)/Bj.T, u=(rx*Bj.ey.y-ry*Bj.ey.x)/det, v=(Bj.ex.x*ry-Bj.ex.y*rx)/det; // 몸통 기준 좌표
+          const q=F[i][k], hasZ=P.wz!=null&&F[j][s].wz!=null&&F[i][s].wz!=null&&F[j][o].wz!=null&&F[i][o].wz!=null;
+          let wx=q.wx,wy=q.wy,wz=q.wz;
+          if(hasZ){ // 3D: 몸이 돈 만큼(위에서 본 회전) 팔 위치도 같이 돌려요 → 등지면 가슴 앞 주먹이 등 뒤로 가지 않게
+            const yaw=l=>Math.atan2(l[o].wz-l[s].wz,l[o].wx-l[s].wx), da=yaw(F[i])-yaw(F[j]), c=Math.cos(da), sn=Math.sin(da);
+            const ox=P.wx-F[j][s].wx, oz=P.wz-F[j][s].wz; wx=F[i][s].wx+ox*c-oz*sn; wz=F[i][s].wz+ox*sn+oz*c; wy=F[i][s].wy+(P.wy-F[j][s].wy); }
+          F[i][k]={x:Bi.S.x+(u*Bi.ex.x+v*Bi.ey.x)*Bi.T,y:Bi.S.y+(u*Bi.ex.y+v*Bi.ey.y)*Bi.T,v:Math.max(.5,Math.min(q.v,.6)),wx,wy,wz}; });
+        fixed++; } }); }
   // 5) 떨림 제거: 멈춰 있을 땐 강하게, 빠른 발차기엔 거의 손대지 않는 필터(1€)를 앞→뒤, 뒤→앞 한 번씩
   const fps=tr.fps||AFPS, S=F.map(l=>l&&l.map(p=>({...p})));
   const run=idx=>{ const res=new Map();
@@ -3068,44 +3122,58 @@ function bodyFrame(S){
 /* 근육 데이터: seg(붙는 뼈대) a~b(구간) d(바깥 방향 f앞 b뒤 o바깥 i안) off(뼈에서 떨어진 정도) r(굵기) */
 const MU=[
  {id:'delt',n:'삼각근',g:'어깨·팔',seg:'ua',a:-.02,b:.5,d:{o:1,f:.15},off:.035,r:.05,pos:'어깨를 둥글게 덮은 근육 (기시: 쇄골·견봉·견갑극 / 정지: 위팔뼈 바깥)',act:'팔을 앞·옆·뒤로 들어 올려요',tip:'지르기에서 팔을 앞으로 뻗고, 막기에서 팔을 들어 올릴 때 써요.'},
- {id:'pec',n:'대흉근',g:'몸통(앞)',seg:'k',a:.7,b:.7,d:{f:1,o:.7},off:.11,r:.045,along:'lat',hl:.07,pos:'가슴 앞쪽 부채꼴 근육 (기시: 쇄골·가슴뼈·갈비연골 / 정지: 위팔뼈 위쪽)',act:'팔을 앞으로 모으고 안쪽으로 돌려요',tip:'태권도 동작에서는 거의 쓰지 않아요. (해부학상 위치만 회색으로 보여 줘요)'},
+ {id:'pec',n:'대흉근',g:'몸통(앞)',seg:'k',a:.7,b:.7,d:{f:1,o:.7},off:.11,r:.045,along:'lat',hl:.07,pos:'가슴 앞쪽 부채꼴 근육 (기시: 쇄골·가슴뼈·갈비연골 / 정지: 위팔뼈 위쪽)',act:'팔을 앞으로 모으고 안쪽으로 돌려요',tip:'지르기에서 팔을 앞·안쪽으로 밀어내고, 막기 후 팔을 몸 앞으로 모을 때 써요. 팔을 앞으로 드는 일(어깨 굴곡)도 도와요.'},
  {id:'bic',n:'상완이두근',g:'어깨·팔',seg:'ua',a:.15,b:.92,d:{f:1},off:.032,r:.03,pos:'위팔 앞쪽 (기시: 견갑골 / 정지: 아래팔 노뼈 위쪽)',act:'팔꿈치를 굽히고 손바닥을 위로 돌려요',tip:'주먹을 허리로 당길 때, 팔을 접어 막을 때 써요.'},
  {id:'tri',n:'상완삼두근',g:'어깨·팔',seg:'ua',a:.1,b:.92,d:{b:1},off:.032,r:.034,pos:'위팔 뒤쪽 (기시: 견갑골·위팔뼈 뒤 / 정지: 팔꿈치 뼈 끝)',act:'팔꿈치를 펴요',tip:'지르기에서 팔을 쭉 펴 주먹을 내미는 주인공이에요.'},
  {id:'fflx',n:'전완굴근',g:'어깨·팔',seg:'fa',a:.05,b:.75,d:{f:1,i:.3},off:.026,r:.024,pos:'아래팔 안쪽·앞쪽 (기시: 위팔뼈 안쪽 / 정지: 손목·손가락뼈)',act:'손목과 손가락을 굽혀 주먹을 쥐어요',tip:'주먹을 꽉 쥐고 손목을 고정할 때 써요.'},
  {id:'fext',n:'전완신근',g:'어깨·팔',seg:'fa',a:.05,b:.75,d:{b:1,o:.3},off:.026,r:.022,pos:'아래팔 바깥·뒤쪽 (기시: 위팔뼈 바깥 / 정지: 손등·손가락뼈)',act:'손목과 손가락을 펴요',tip:'지르기 순간 손목이 꺾이지 않게 잡아 줘요.'},
- {id:'trap',n:'승모근',g:'몸통(뒤)',seg:'k',a:.95,b:.95,d:{b:1,o:.3},off:.05,r:.035,along:'lat',hl:.08,pos:'목에서 등 위쪽까지 걸친 마름모 근육 (기시: 뒤통수·목뼈·등뼈 / 정지: 쇄골·어깨뼈)',act:'어깨를 으쓱 올리고 어깨뼈를 모아요',tip:'어깨가 올라가지 않게 눌러 주고, 팔을 당길 때 써요.'},
- {id:'lat',n:'광배근',g:'몸통(뒤)',seg:'k',a:.2,b:.78,d:{b:1,o:.6},off:.09,r:.075,pos:'등 옆에서 아래로 넓게 퍼진 근육 (기시: 허리뼈·골반 / 정지: 위팔뼈 앞쪽)',act:'팔을 몸 쪽으로 당기고 뒤로 보내요',tip:'지르는 반대 주먹을 허리로 당기는 힘이 여기서 나와요.'},
+ {id:'trap',n:'승모근',g:'몸통(뒤)',seg:'k',a:.95,b:.95,d:{b:1,o:.3},off:.05,r:.035,along:'lat',hl:.08,pos:'목에서 등 위쪽까지 걸친 마름모 근육 (기시: 뒤통수·목뼈·등뼈 / 정지: 쇄골·어깨뼈)',act:'어깨를 으쓱 올리고 어깨뼈를 모으며, 팔을 머리 위로 들 때 어깨뼈를 위로 돌려 줘요',tip:'어깨가 올라가지 않게 눌러 주고, 팔을 당길 때 써요.'},
+ {id:'lat',n:'광배근',g:'몸통(뒤)',seg:'k',a:.2,b:.78,d:{b:1,o:.6},off:.09,r:.075,pos:'등 옆에서 아래로 넓게 퍼진 근육 (기시: 허리뼈·골반 / 정지: 위팔뼈 앞쪽)',act:'팔을 몸 쪽으로 당기고 뒤로 보내며 안쪽으로 돌려요',tip:'지르는 반대 주먹을 허리로 당기는 힘이 여기서 나와요.'},
  {id:'rect',n:'복직근',g:'몸통(앞)',seg:'k',a:.06,b:.62,d:{f:1,o:.22},off:.075,r:.035,pos:'배 앞 가운데 세로 근육 (기시: 치골 / 정지: 가슴뼈·갈비연골)',act:'상체를 숙이고 배를 단단히 잡아요',tip:'차기와 지르기 끝에서 몸통을 단단히 잡아 힘이 새지 않게 해요.'},
  {id:'obl',n:'복사근',g:'몸통(앞)',seg:'k',a:.1,b:.62,d:{o:1,f:.4},off:.1,r:.05,pos:'옆구리를 비스듬히 감싼 근육 (기시: 아래 갈비뼈 / 정지: 골반·복부 중앙선)',act:'몸통을 돌리고 옆으로 굽혀요',tip:'돌려차기·지르기의 허리 회전 엔진이에요.'},
  {id:'erec',n:'척추기립근',g:'몸통(뒤)',seg:'k',a:0,b:.95,d:{b:1,o:.2},off:.08,r:.03,pos:'척추 양옆을 따라 세로로 달리는 근육 (기시: 엉치뼈·골반 / 정지: 갈비뼈·두개골)',act:'허리를 펴고 상체를 세워요',tip:'상체가 앞으로 숙지 않게 곧게 세워 줘요.'},
  {id:'psoas',n:'엉덩허리근',g:'엉덩이·허벅지',seg:'t',a:0,b:.3,d:{f:1},off:.035,r:.032,pos:'골반 안쪽 깊은 곳 (기시: 허리뼈·골반 안쪽 / 정지: 넙다리뼈 안쪽 위) ※ 몸속 깊어 그림은 추정 위치예요',act:'허벅지를 앞으로 끌어올려요',tip:'앞차기에서 무릎을 끌어올릴 때 써요.'},
- {id:'gmax',n:'대둔근',g:'엉덩이·허벅지',seg:'t',a:-.05,b:.3,d:{b:1,o:.3},off:.07,r:.06,pos:'엉덩이에서 가장 큰 근육 (기시: 엉치뼈·골반 뒤 / 정지: 넙다리뼈 뒤·바깥)',act:'엉덩관절을 펴고 다리를 뒤로 밀어요',tip:'뒷발로 땅을 밀어 몸을 앞으로 보내는 엔진이에요.'},
+ {id:'gmax',n:'대둔근',g:'엉덩이·허벅지',seg:'t',a:-.05,b:.3,d:{b:1,o:.3},off:.07,r:.06,pos:'엉덩이에서 가장 큰 근육 (기시: 엉치뼈·골반 뒤 / 정지: 넙다리뼈 뒤·바깥)',act:'엉덩관절을 펴서 다리를 뒤로 밀고, 다리를 바깥으로 돌려요. 앉았다 일어설 때 가장 큰 힘을 내요',tip:'뒷발로 땅을 밀어 몸을 앞으로 보내는 엔진이에요.'},
  {id:'gmed',n:'중둔근',g:'엉덩이·허벅지',seg:'t',a:-.15,b:.18,d:{o:1,b:.3},off:.065,r:.045,pos:'엉덩이 옆쪽 (기시: 골반 바깥 / 정지: 넙다리뼈 큰 돌기)',act:'다리를 옆으로 벌리고 골반 균형을 잡아요',tip:'한 발 서기·옆차기에서 골반이 기울지 않게 잡아요.'},
  {id:'rf',n:'대퇴직근',g:'엉덩이·허벅지',seg:'t',a:.05,b:.95,d:{f:1},off:.04,r:.03,pos:'허벅지 앞 가운데 (기시: 골반 앞 / 정지: 무릎뼈 힘줄)',act:'무릎을 펴고 엉덩관절을 굽혀요',tip:'앞차기에서 무릎을 올리고 펴는 두 가지 일을 해요.'},
- {id:'vl',n:'외측광근',g:'엉덩이·허벅지',seg:'t',a:.25,b:.95,d:{o:1,f:.5},off:.045,r:.04,pos:'허벅지 바깥쪽 (기시: 넙다리뼈 바깥 / 정지: 무릎뼈 힘줄)',act:'무릎을 펴요',tip:'기마서기·앞굽이에서 몸을 버티는 힘이에요.'},
+ {id:'vl',n:'외측광근',g:'엉덩이·허벅지',seg:'t',a:.25,b:.95,d:{o:1,f:.5},off:.045,r:.04,pos:'허벅지 바깥쪽 (기시: 넙다리뼈 바깥 / 정지: 무릎뼈 힘줄)',act:'무릎을 펴요. 체중을 실은 채 무릎을 굽힐 땐 늘어나며 버텨요(스쿼트 내려가기)',tip:'기마서기·앞굽이에서 몸을 버티는 힘이에요.'},
  {id:'vm',n:'내측광근',g:'엉덩이·허벅지',seg:'t',a:.5,b:.97,d:{i:1,f:.5},off:.04,r:.034,pos:'무릎 위 안쪽의 물방울 모양 (기시: 넙다리뼈 안쪽 / 정지: 무릎뼈 힘줄)',act:'무릎을 끝까지 펴고 무릎뼈를 잡아요',tip:'서기에서 무릎이 안으로 무너지지 않게 도와요.'},
- {id:'tfl',n:'대퇴근막장근',g:'엉덩이·허벅지',seg:'t',a:0,b:.35,d:{o:1,f:.4},off:.05,r:.025,pos:'엉덩이 앞옆 (기시: 골반 앞 / 정지: 허벅지 바깥 띠)',act:'다리를 앞·옆으로 들어요',tip:'옆차기·앞차기에서 다리를 들어 올릴 때 도와요.'},
+ {id:'tfl',n:'대퇴근막장근',g:'엉덩이·허벅지',seg:'t',a:0,b:.35,d:{o:1,f:.4},off:.05,r:.025,pos:'엉덩이 앞옆 (기시: 골반 앞 / 정지: 허벅지 바깥 띠)',act:'다리를 앞·옆으로 들고 안쪽으로 돌려요',tip:'옆차기·앞차기에서 다리를 들어 올릴 때 도와요.'},
  {id:'sart',n:'봉공근',g:'엉덩이·허벅지',seg:'t',a:0,b:.8,d:{f:1,i:.6},off:.045,r:.018,pos:'허벅지 앞을 비스듬히 가로지르는 가장 긴 근육 (기시: 골반 앞 / 정지: 정강이뼈 안쪽 위)',act:'다리를 굽혀 바깥으로 돌려요',tip:'돌려차기에서 다리를 접어 돌릴 때 도와요.'},
  {id:'add',n:'내전근',g:'엉덩이·허벅지',seg:'t',a:.05,b:.7,d:{i:1},off:.05,r:.035,pos:'허벅지 안쪽 (기시: 치골 / 정지: 넙다리뼈 뒤)',act:'다리를 몸 쪽으로 모아요',tip:'벌린 다리를 모으고 서기를 안정시켜요.'},
  {id:'bf',n:'대퇴이두근',g:'엉덩이·허벅지',seg:'t',a:.1,b:.95,d:{b:1,o:.5},off:.05,r:.033,pos:'허벅지 뒤 바깥쪽 햄스트링 (기시: 앉은뼈·넙다리뼈 / 정지: 종아리뼈 위)',act:'무릎을 굽히고 엉덩관절을 펴요',tip:'돌려차기에서 다리를 접어 올리고 땅을 밀 때 써요.'},
  {id:'sm',n:'반건·반막양근',g:'엉덩이·허벅지',seg:'t',a:.1,b:.95,d:{b:1,i:.5},off:.05,r:.033,pos:'허벅지 뒤 안쪽 햄스트링 (기시: 앉은뼈 / 정지: 정강이뼈 안쪽 위)',act:'무릎을 굽히고 엉덩관절을 펴요',tip:'뒷다리로 밀어내고 무릎을 접을 때 같이 일해요.'},
  {id:'gas',n:'비복근',g:'종아리·발',seg:'s',a:0,b:.6,d:{b:1},off:.045,r:.035,pos:'종아리 뒤쪽 불룩한 근육 (기시: 넙다리뼈 아래 / 정지: 아킬레스건)',act:'발끝으로 서고 무릎을 굽혀요',tip:'발끝으로 땅을 차고 스텝·점프할 때 써요.'},
  {id:'sol',n:'가자미근',g:'종아리·발',seg:'s',a:.3,b:.85,d:{b:1},off:.035,r:.028,pos:'비복근 아래 깊은 곳 (기시: 종아리뼈·정강이뼈 위 / 정지: 아킬레스건)',act:'발목을 아래로 눌러 발끝으로 밀어요',tip:'서 있는 동안 계속 일하며 균형을 잡아요.'},
- {id:'tib',n:'전경골근',g:'종아리·발',seg:'s',a:.08,b:.85,d:{f:1,o:.3},off:.035,r:.02,pos:'정강이 앞쪽 (기시: 정강이뼈 바깥 위 / 정지: 발 안쪽 뼈)',act:'발끝을 들어 올려요',tip:'차기에서 발끝을 당기고 착지할 때 발을 들어 줘요.'}];
+ {id:'tib',n:'전경골근',g:'종아리·발',seg:'s',a:.08,b:.85,d:{f:1,o:.3},off:.035,r:.02,pos:'정강이 앞쪽 (기시: 정강이뼈 바깥 위 / 정지: 발 안쪽 뼈)',act:'발끝을 들어 올리고(배측굴곡) 발바닥을 안쪽으로 돌려요',tip:'차기에서 발끝을 당기고 착지할 때 발을 들어 줘요.'}];
+/* 관절 움직임 → 일하는 근육 (생리학 기준)
+   · 발이 떠 있는 팔다리(열린 사슬): 관절을 그 방향으로 움직이는 근육이 단축성으로 일하고, 빠른 동작 끝을 멈출 땐 반대쪽 근육이 신장성으로 잡아요.
+   · 중력을 따라 천천히 내려가는 동작: 내려가는 방향의 근육이 아니라 반대쪽(버티는) 근육이 신장성으로 일해요.
+   · 체중이 실린 다리(닫힌 사슬): 굽혀질 땐 폄근이 신장성, 펴질 땐 폄근이 단축성, 멈춰 굽힌 채면 등척성이에요. */
 const RULES=[
- {id:'shFlex',label:'어깨관절 굴곡(팔 앞으로)',P:['delt'],S:['bic']},
- {id:'shExt',label:'어깨관절 신전(팔 뒤로)',P:['lat','tri'],S:['delt']},
- {id:'shAbd',label:'어깨관절 외전(팔 옆으로)',P:['delt','trap'],S:[]},
- {id:'shAdd',label:'어깨관절 내전(팔 모으기)',P:['lat'],S:[]},
+ {id:'shFlex',label:'어깨관절 굴곡(팔 앞으로)',P:['delt'],S:['pec','bic']},
+ {id:'shExt',label:'어깨관절 신전(팔 뒤로 당기기)',P:['lat'],S:['tri','delt']},
+ {id:'shAbd',label:'어깨관절 외전(팔 옆으로)',P:['delt'],S:['trap']},
+ {id:'shAdd',label:'어깨관절 내전(팔 모으기)',P:['lat','pec'],S:['tri']},
  {id:'elFlex',label:'팔꿈치 굴곡',P:['bic'],S:['fflx']},
  {id:'elExt',label:'팔꿈치 신전',P:['tri'],S:['fext']},
- {id:'hipFlex',label:'엉덩관절 굴곡',P:['psoas','rf'],S:['tfl','sart']},
- {id:'hipExt',label:'엉덩관절 신전',P:['gmax','bf','sm'],S:['add']},
- {id:'hipAbd',label:'엉덩관절 외전',P:['gmed','tfl'],S:['gmax']},
- {id:'hipAdd',label:'엉덩관절 내전',P:['add'],S:[]},
- {id:'kneeFlex',label:'무릎 굴곡',P:['bf','sm'],S:['gas','sart']},
- {id:'kneeExt',label:'무릎 신전',P:['vl','vm','rf'],S:['tfl']},
- {id:'trunkRot',label:'몸통 회전',P:['obl'],S:['erec','rect']}];
+ {id:'hipFlex',label:'엉덩관절 굴곡(다리 들기)',P:['psoas','rf'],S:['tfl','sart']},
+ {id:'hipExt',label:'엉덩관절 신전(다리 뒤로)',P:['gmax','bf','sm'],S:['add']},
+ {id:'hipAbd',label:'엉덩관절 외전(다리 옆으로)',P:['gmed','tfl'],S:['gmax','sart']},
+ {id:'hipAdd',label:'엉덩관절 내전(다리 모으기)',P:['add'],S:[]},
+ {id:'kneeFlex',label:'무릎 굴곡(다리 접기)',P:['bf','sm'],S:['gas','sart']},
+ {id:'kneeExt',label:'무릎 신전(다리 펴기)',P:['vl','vm','rf'],S:[]},
+ {id:'trunkRot',label:'몸통 회전',P:['obl'],S:['erec']},
+ {id:'hipLoad',label:'체중 실은 엉덩관절 (스쿼트·서기 자세에서 굽히고 펴기)',P:['gmax'],S:['bf','sm','add','erec']},
+ {id:'kneeLoad',label:'체중 실은 무릎 (스쿼트·서기 자세에서 굽히고 펴기)',P:['vl','vm'],S:['rf','gmax']},
+ {id:'ankleLoad',label:'체중 실은 발목 (무릎이 앞으로 나가며 버티기)',P:['sol'],S:['gas','tib']},
+ {id:'calfRaise',label:'발끝으로 밀기 (발목 폄·도약)',P:['gas','sol'],S:[]},
+ {id:'singleLeg',label:'한 발 서기 골반 균형',P:['gmed'],S:['tfl','gmax']},
+ {id:'trunkLean',label:'상체 숙인 자세 버티기',P:['erec'],S:['gmax','bf']},
+ {id:'shLower',label:'든 팔을 천천히 내리기 (중력 따라)',P:['delt'],S:['trap']},
+ {id:'foreLower',label:'굽힌 팔꿈치를 천천히 펴기 (중력 따라)',P:['bic'],S:['fflx']},
+ {id:'legLower',label:'든 다리를 천천히 내리기 (중력 따라)',P:['psoas','rf'],S:['tfl']},
+ {id:'shinLower',label:'든 다리의 정강이를 천천히 내리기 (중력 따라)',P:['vl','vm','rf'],S:[]}];
 const TY={con:'단축성',ecc:'신장성',iso:'등척성'}, nm=id=>MU.find(m=>m.id===id).n;
 let MDEL=new Set(); try{ MDEL=new Set(JSON.parse(localStorage.getItem('coachPro.musDel')||'[]')); }catch(e){}
 const saveM=()=>{ try{ localStorage.setItem('coachPro.musDel',JSON.stringify([...MDEL])); }catch(e){} };
@@ -3148,8 +3216,8 @@ const MUSH={
    [['fa',.6,70],['fa',.6,190]],
    [['fa',.96,150],['fa',.96,200]]]},
  trap:{th:.012,ly:2,nv:6,L:[
-   [['T',1.24,180],['T',1.14,180],['T',1.02,180],['T',.88,180],['T',.7,180],['T',.48,180]],
-   [['T',1.18,150],['T',1.1,132],['T',1.0,140],['T',.88,156],['T',.76,165],['T',.64,171]],
+   [['T',1.13,180],['T',1.06,180],['T',.97,180],['T',.85,180],['T',.7,180],['T',.48,180]],
+   [['T',1.1,150],['T',1.05,132],['T',.98,140],['T',.88,156],['T',.76,165],['T',.64,171]],
    [['J','sh',.09,-.14,.05],['J','sh',.11,-.02,-.02],['J','sh',.08,-.08,-.1],['J','sh',.06,-.2,-.15],['T',.9,150],['T',.88,153]]]},
  lat:{th:.015,ly:1,nv:6,L:[
    [['T',.22,140],['T',.3,170],['T',.42,180],['T',.55,180],['T',.66,178],['T',.74,172]],
@@ -3330,13 +3398,16 @@ function muShape(m,S,B){
 /* 관절 각도(3D) → 어떤 근육이 일하는지 추정 */
 function angsP(p){
   const S0=sceneOf(p); if(!S0) return null; const F=bodyFrame(S0); if(!F) return null; const V=S0.V, o={};
-  [['L',23,25,27,11,13,15,1],['R',24,26,28,12,14,16,-1]].forEach(([S,h,k,a,s,e,w,sg])=>{
-    const r={}, H=V(h),K=V(k),A=V(a),Sh=V(s),E=V(e),Wr=V(w);
+  [['L',23,25,27,11,13,15,1,29,31],['R',24,26,28,12,14,16,-1,30,32]].forEach(([S,h,k,a,s,e,w,sg,he,to])=>{
+    const r={}, H=V(h),K=V(k),A=V(a),Sh=V(s),E=V(e),Wr=V(w),He=V(he),To=V(to);
+    if(K&&A&&He&&To){ const s1=VM.nrm(VM.sub(K,A)), f1=VM.nrm(VM.sub(To,He)); r.df=90-Math.acos(Math.max(-1,Math.min(1,VM.dot(s1,f1))))*DA; } // 발목 배측굴곡(+ = 정강이가 발등 쪽으로)
     if(H&&K&&A){ const d=VM.sub(K,H), x=VM.dot(d,F.lr)*sg, y=VM.dot(d,F.up), z=VM.dot(d,F.fr), t1=VM.nrm(VM.sub(H,K)), t2=VM.nrm(VM.sub(A,K));
-      r.hf=Math.atan2(z,-y)*DA; r.ha=Math.atan2(x,-y)*DA; r.kf=180-Math.acos(Math.max(-1,Math.min(1,VM.dot(t1,t2))))*DA; }
+      r.hf=Math.atan2(z,-y)*DA; r.ha=Math.abs(z)>1.2*Math.hypot(x,y)?null:Math.atan2(x,-y)*DA; r.kf=180-Math.acos(Math.max(-1,Math.min(1,VM.dot(t1,t2))))*DA; }
     if(Sh&&E&&Wr){ const d=VM.sub(E,Sh), x=VM.dot(d,F.lr)*sg, y=VM.dot(d,F.up), z=VM.dot(d,F.fr), t1=VM.nrm(VM.sub(Sh,E)), t2=VM.nrm(VM.sub(Wr,E));
-      r.sf=Math.atan2(z,-y)*DA; r.sa=Math.atan2(x,-y)*DA; r.ef=180-Math.acos(Math.max(-1,Math.min(1,VM.dot(t1,t2))))*DA; }
+      r.sf=Math.atan2(z,-y)*DA; r.sa=Math.abs(z)>1.2*Math.hypot(x,y)?null:Math.atan2(x,-y)*DA; r.ef=180-Math.acos(Math.max(-1,Math.min(1,VM.dot(t1,t2))))*DA; }
     o[S]=r; });
+  o.tl=Math.acos(Math.max(-1,Math.min(1,F.up.y)))*DA; // 상체가 수직에서 기운 정도
+  { const hv2=VM.sub(V(23),V(24)), sv2=VM.sub(V(11),V(12)); o.tw=Math.atan2(VM.dot(VM.cross(hv2,sv2),F.up),VM.dot(hv2,sv2))*DA; } // + = 어깨가 골반보다 왼쪽으로 돌아감
   const sv=VM.sub(V(11),V(12)), hv=VM.sub(V(23),V(24)); o.tr=Math.atan2(sv.x*hv.z-sv.z*hv.x,sv.x*hv.x+sv.z*hv.z)*DA; return o;
 }
 function muAct(p){
@@ -3345,16 +3416,51 @@ function muAct(p){
   const d=.1,T=video.currentTime, A0=angsP(p), A1=angsP(poseAt(track,Math.max(0,T-d))), A2=angsP(poseAt(track,Math.max(0,T-2*d)));
   if(!A0||!A1||!A2) return LASTACT;
   const R=id=>RULES.find(r=>r.id===id);
-  const put=(S0,r,type)=>{ if(!r||MDEL.has(r.id)) return; (r.id==='trunkRot'?['L','R']:[S0]).forEach(S=>{ r.S.forEach(id=>{ if(!map[S+id]) map[S+id]={role:'S',type}; }); r.P.forEach(id=>{ map[S+id]={role:'P',type}; }); });
-    lines.push((r.id==='trunkRot'?'':(S0==='L'?'왼쪽 ':'오른쪽 '))+r.label+' · '+TY[type]+' — 주동 '+r.P.map(nm).join('·')+(r.S.length?' / 보조 '+r.S.map(nm).join('·'):'')); };
+  const both=r=>r.id==='trunkLean';
+  const put=(S0,r,type)=>{ if(!r||MDEL.has(r.id)) return; (both(r)?['L','R']:[S0]).forEach(S=>{ r.S.forEach(id=>{ if(!map[S+id]) map[S+id]={role:'S',type}; }); r.P.forEach(id=>{ map[S+id]={role:'P',type}; }); });
+    lines.push((both(r)?'':(S0==='L'?'왼쪽 ':'오른쪽 '))+r.label+' · '+TY[type]+' — 주동 '+r.P.map(nm).join('·')+(r.S.length?' / 보조 '+r.S.map(nm).join('·'):'')); };
   const axis=(S,get,pos,neg,hold)=>{ const v0=get(A0),v1=get(A1),v2=get(A2); if(v0==null||v1==null||v2==null) return; const w=dfa(v0,v1)/d, w1=dfa(v1,v2)/d;
     if(Math.abs(w)>45){ const dec=Math.sign(w)===Math.sign(w1)&&Math.abs(w)<.8*Math.abs(w1);
       if(neg) put(S,R(dec?(w>0?neg:pos):(w>0?pos:neg)),dec?'ecc':'con'); else put(S,R(pos),dec?'ecc':'con'); }
     else if(hold&&v0>hold[0]) put(S,R(hold[1]),'iso'); };
+  // 발이 땅에 닿아 체중이 실린 다리인지 (지면반력 계산 결과 → 없으면 발 높이로 판단)
+  const gi=Math.round(T*AFPS), gq=gb?gbNear(gi):null;
+  const footY=k=>{ const ids=k?[28,30,32]:[27,29,31], ys=ids.map(i=>p[i]).filter(q=>q&&(q.visibility??1)>.15).map(q=>q.y); return ys.length?Math.max(...ys):null; };
+  const fy=k=>{ const ids=k?[28,30,32]:[27,29,31], ys=ids.map(i=>p[i]).filter(q=>q&&q.y!=null).map(q=>q.y); return ys.length?Math.max(...ys):null; };
+  const footVis=k=>{ const ids=k?[28,30,32]:[27,29,31]; return Math.max(...ids.map(i=>p[i]?(p[i].visibility??1):0)); };
+  const loaded=S=>{ const k=S==='L'?0:1;
+    if(gq&&(gq.ft[k]||footVis(k)>=.3)) return !!gq.ft[k]; // 발이 잘 보이면 지면반력 판단을 그대로
+    const a=fy(k), b=fy(1-k); if(a==null) return true; if(b==null) return true; return Math.max(a,b)-a<.035; }; // 발이 가려졌으면 발 높이로 추정
+  // 체중을 실은 관절: 굽혀지면 → 펴는 근육이 늘어나며 버팀(신장성), 펴지면 → 펴는 근육이 줄어들며 밀어 올림(단축성), 멈춰 굽힌 채면 → 등척성
+  const loadAxis=(S,get,id,thr)=>{ const v0=get(A0),v1=get(A1); if(v0==null||v1==null) return; const w=dfa(v0,v1)/d;
+    if(w>25) put(S,R(id),'ecc'); else if(w<-25) put(S,R(id),'con'); else if(v0>thr) put(S,R(id),'iso'); };
   ['L','R'].forEach(S=>{ if(!A0[S]||!A1[S]||!A2[S]) return;
-    axis(S,a=>a[S]&&a[S].hf,'hipFlex','hipExt',[45,'hipFlex']); axis(S,a=>a[S]&&a[S].ha,'hipAbd','hipAdd',[30,'hipAbd']); axis(S,a=>a[S]&&a[S].kf,'kneeFlex','kneeExt',[60,'kneeFlex']);
-    axis(S,a=>a[S]&&a[S].sf,'shFlex','shExt',[80,'shFlex']); axis(S,a=>a[S]&&a[S].sa,'shAbd','shAdd',[60,'shAbd']); axis(S,a=>a[S]&&a[S].ef,'elFlex','elExt',[75,'elFlex']); });
-  axis('L',a=>a.tr,'trunkRot',null,null);
+    const ld=loaded(S), other=S==='L'?'R':'L';
+    if(ld){ // 서 있는 다리 (스쿼트·앞굽이·기마서기·축발)
+      loadAxis(S,a=>a[S]&&a[S].hf,'hipLoad',25); loadAxis(S,a=>a[S]&&a[S].kf,'kneeLoad',20);
+      const v0=A0[S].df, v1=A1[S].df; if(v0!=null&&v1!=null){ const w=dfa(v0,v1)/d; if(w>25) put(S,R('ankleLoad'),'ecc'); else if(w<-40) put(S,R('calfRaise'),'con'); else if(v0>15) put(S,R('ankleLoad'),'iso'); }
+      if(!loaded(other)) put(S,R('singleLeg'),'iso'); // 반대발이 떠 있으면 한 발 서기
+    } else { // 떠 있는 다리 (차기·무릎 올리기): 관절을 움직이는 근육이 직접 일함
+      const h0=A0[S].hf, h1=A1[S].hf, wh=h0!=null&&h1!=null?dfa(h0,h1)/d:0, k0=A0[S].kf, k1=A1[S].kf, wk=k0!=null&&k1!=null?dfa(k0,k1)/d:0;
+      if(h0!=null&&h0>30&&wh<-30&&wh>-220) put(S,R('legLower'),'ecc'); // 든 다리를 천천히 내리면 엉덩관절 굽힘근이 버팀
+      else axis(S,a=>a[S]&&a[S].hf,'hipFlex','hipExt',[45,'hipFlex']);
+      axis(S,a=>a[S]&&a[S].ha,'hipAbd','hipAdd',[30,'hipAbd']);
+      if(h0!=null&&h0>45&&k0!=null&&wk>30&&wk<220) put(S,R('shinLower'),'ecc'); // 허벅지를 든 채 정강이가 천천히 내려오면 대퇴사두근이 버팀
+      else axis(S,a=>a[S]&&a[S].kf,'kneeFlex','kneeExt',[60,'kneeFlex']); }
+    // 팔: 앞으로 든 팔을 천천히 내릴 땐 광배근이 아니라 삼각근이 버티며 내려요
+    { const v0=A0[S].sf, v1=A1[S].sf; const w=v0!=null&&v1!=null?dfa(v0,v1)/d:0;
+      if(v0!=null&&v0>25&&w<-30&&w>-220) put(S,R('shLower'),'ecc'); else axis(S,a=>a[S]&&a[S].sf,'shFlex','shExt',[80,'shFlex']); }
+    { const v0=A0[S].sa, v1=A1[S].sa; const w=v0!=null&&v1!=null?dfa(v0,v1)/d:0;
+      if(v0!=null&&v0>25&&w<-30&&w>-220) put(S,R('shLower'),'ecc'); else axis(S,a=>a[S]&&a[S].sa,'shAbd','shAdd',[60,'shAbd']); }
+    { const e0=A0[S].ef, e1=A1[S].ef, w=e0!=null&&e1!=null?dfa(e0,e1)/d:0, up=Math.max(A0[S].sf||0,Math.abs(A0[S].sa||0));
+      if(e0!=null&&e0>20&&up<50&&w<-30&&w>-220) put(S,R('foreLower'),'ecc'); // 팔을 내린 채 아래팔이 천천히 내려오면 이두근이 버팀
+      else axis(S,a=>a[S]&&a[S].ef,'elFlex','elExt',[75,'elFlex']); } });
+  if(A0.tl!=null&&A0.tl>22&&(loaded('L')||loaded('R'))) put('L',R('trunkLean'),'iso'); // 상체를 숙이면 척추기립근이 버팀
+  // 몸통 회전: 왼쪽으로 돌면 오른쪽 바깥복사근 + 왼쪽 속복사근 (반대도 마찬가지)
+  if(A0.tw!=null&&A1.tw!=null&&!MDEL.has('trunkRot')){ const w=dfa(A0.tw,A1.tw)/d;
+    if(Math.abs(w)>45){ const P=w>0?'R':'L', Q=P==='R'?'L':'R';
+      map[P+'obl']={role:'P',type:'con'}; if(!map[Q+'obl']) map[Q+'obl']={role:'S',type:'con'}; if(!map[P+'erec']) map[P+'erec']={role:'S',type:'con'};
+      lines.push(`몸통 ${w>0?'왼쪽':'오른쪽'}으로 회전 · 단축성 — 주동 ${P==='R'?'오른쪽':'왼쪽'} 복사근(바깥) / 보조 ${Q==='R'?'오른쪽':'왼쪽'} 복사근(속)·척추기립근`); } }
   return LASTACT;
 }
 /* 근육별 운동: [정식 운동 이름, 종류(힘·속도·파워), 한 줄 설명] — 헬스장·체육 현장에서 실제로 쓰는 이름만 넣었어요 */
@@ -3439,7 +3545,7 @@ function drawBodyMuscles(){
   ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
   items.forEach(it=>{ const r=act.map[it.S+it.id], sel=MSEL&&MSEL.id===it.id&&MSEL.S===it.S, {nu,nv}=it.g, T=it.T, on=it.on;
     const chart=muChart();
-    const col=sel?MUCOL.sel:chart?hexA(MCOL[it.id]||'#c8463a',.88):r?(r.role==='P'?MUCOL.P:MUCOL.S):it.id==='pec'?'rgba(170,170,170,.34)':MUCOL.base;
+    const col=sel?MUCOL.sel:chart?hexA(MCOL[it.id]||'#c8463a',.88):r?(r.role==='P'?MUCOL.P:MUCOL.S):MUCOL.base;
     const tc=chart?'rgba(226,228,232,.9)':'rgba(238,224,204,.75)';
     const gr=ctx.createLinearGradient(it.p0.x,it.p0.y,it.p1.x,it.p1.y); // 양 끝은 힘줄(밝은 회색), 가운데는 근육 살
     gr.addColorStop(0,tc); gr.addColorStop(.12,col); gr.addColorStop(.88,col); gr.addColorStop(1,tc);
@@ -3641,7 +3747,9 @@ function init3(){
   const hlg=new TH.BufferGeometry(); hlg.setAttribute('position',hp); hlg.setIndex(hl);
   const headM=new TH.Mesh(hg,SKIN), headL=new TH.LineSegments(hlg,WIRE); headM.castShadow=true; headM.renderOrder=3; headL.renderOrder=4; headG.add(headM,headL);
   [-1,1].forEach(s=>{ const e=new TH.Mesh(new TH.SphereGeometry(1,10,8),SKIN); e.scale.set(.16,.28,.12); e.position.set(s*.97,.02,-.04); e.castShadow=true; headG.add(e); });
-  const nose=new TH.Mesh(new TH.ConeGeometry(.025,.09,10),new TH.MeshLambertMaterial({color:0xffd23f})); nose.visible=false; sc3.add(nose);
+  { const nz=new TH.Mesh(new TH.SphereGeometry(1,10,8),SKIN); nz.scale.set(.13,.2,.16); nz.position.set(0,-.12,.93); headG.add(nz); } // 얼굴의 코 (작게)
+  const arrShape=new TH.Shape(); arrShape.moveTo(0,.34); arrShape.lineTo(.14,.12); arrShape.lineTo(.05,.12); arrShape.lineTo(.05,-.08); arrShape.lineTo(-.05,-.08); arrShape.lineTo(-.05,.12); arrShape.lineTo(-.14,.12); arrShape.closePath();
+  const nose=new TH.Mesh(new TH.ShapeGeometry(arrShape),new TH.MeshBasicMaterial({color:0xffd23f,transparent:true,opacity:.85,side:TH.DoubleSide,depthWrite:false})); nose.visible=false; sc3.add(nose); // 바닥의 노란 화살표 = 몸이 향한 방향
   // 몸통 단면: 앞뒤 볼륨(가슴은 앞으로, 엉덩이는 뒤로) + 각진 정도
   const lerpTab=(T,y)=>{ if(y<=T[0][0]) return T[0][1]; for(let i=1;i<T.length;i++) if(y<=T[i][0]){ const a=T[i-1],b=T[i],w=(y-a[0])/(b[0]-a[0]); return a[1]+(b[1]-a[1])*w; } return T[T.length-1][1]; };
   const TFRONT=[[-.3,.92],[0,.95],[.4,1.0],[.72,1.12],[.92,1.04],[1.15,.9]], TBACK=[[-.3,1.12],[-.05,1.2],[.2,1.0],[.45,.94],[.78,.98],[1.15,.92]], TPOW=[[-.3,2.2],[.4,2.0],[.8,2.6],[1.0,2.4],[1.15,2.0]];
@@ -3747,14 +3855,16 @@ function init3(){
         headG.quaternion.setFromRotationMatrix(new TH.Matrix4().makeBasis(hl2,hu,hf)); headG.scale.set(U(.096),U(.118),U(.106));
         const base=headG.position.clone().addScaledVector(hu,-U(.075)).addScaledVector(hf,-U(.02));
         tube(neck,[vec(B.C(.98)),vec(B.C(1.12)),base],[[0,U(.05),U(.06)],[1,U(.038),U(.042)],[2,U(.035),U(.037)]],FR.clone());
-        nose.visible=true; nose.position.copy(headG.position).addScaledVector(hf,U(.115)); nose.quaternion.setFromUnitVectors(Y,hf); }
+      }
+      { const f=FR.clone(); f.y=0; if(f.lengthSq()>1e-6){ f.normalize(); const gy0=(G3.gy??-.9)+.012; nose.visible=true; nose.position.set(HM.x+f.x*U(.28),gy0,HM.z+f.z*U(.28)); nose.scale.setScalar(u);
+          nose.quaternion.setFromRotationMatrix(new TH.Matrix4().makeBasis(new TH.Vector3().crossVectors(f,Y),f,Y)); } }
       let act={map:{},lines:[]};
       if(MUon&&track) act=muAct(p);
       if(MUon){ MS.forEach(o=>{ const g=muShape(o.m,o.S,B); if(!g||g.nu!==o.nu||g.nv!==o.nv) return; const P=o.mesh.geometry.attributes.position, A=P.array, N=g.nu*g.nv;
           for(let k=0;k<N;k++){ const t=g.top[k], b=g.base[k]; A[k*3]=t.x; A[k*3+1]=t.y; A[k*3+2]=t.z; A[(k+N)*3]=b.x; A[(k+N)*3+1]=b.y; A[(k+N)*3+2]=b.z; }
           P.needsUpdate=true; o.mesh.geometry.computeVertexNormals(); o.c=g.c; o.dv=g.dv; o.rad=g.rad; o.mesh.visible=true;
           const r=act.map[o.S+o.m.id], isSel=MSEL&&MSEL.id===o.m.id&&MSEL.S===o.S;
-          o.mesh.material=isSel?MSL:muChart()&&MC[o.m.id]?(r?MC[o.m.id][r.role]:MC[o.m.id].n):r?(r.role==='P'?MP:MS2):o.m.id==='pec'?MG:MN; }); }
+          o.mesh.material=isSel?MSL:muChart()&&MC[o.m.id]?(r?MC[o.m.id][r.role]:MC[o.m.id].n):r?(r.role==='P'?MP:MS2):MN; }); }
       if(MUon&&track){ const c=muChips(act); setMu(c.key||'none',c.html); } else setMu(MUon?'notrack':'off',MUon?'<div class="sub">근육 표시는 "⚡ 동작 정밀 분석" 후에 나와요.</div>':'');
       // 바닥: 영상 속 발 높이로 맞추고, 몸이 움직인 만큼 바닥이 반대로 흘러 실제로 이동하는 것처럼 보여요
       if(track!==gTrack){ gTrack=track; GPX=null; X0ref=null;
@@ -3786,7 +3896,7 @@ function init3(){
     cam.lookAt(ctr);
     R.render(sc3,cam); if(REC) recDraw();
     $('v3play').textContent=$('play').textContent; $('v3seek').value=$('seek').value; $('v3loop').checked=$('loopOn').checked;
-    $('v3t').textContent=`프레임 ${$('fno').textContent} · ${video.currentTime.toFixed(2)}초`+(loopA!=null?` · 구간 ${loopA.toFixed(2)}`:'')+(loopB!=null?`~${loopB.toFixed(2)}초`:'')+(view?' · '+VNAME[view]:'')+' · 노란 코 = 몸이 향한 방향';
+    $('v3t').textContent=`프레임 ${$('fno').textContent} · ${video.currentTime.toFixed(2)}초`+(loopA!=null?` · 구간 ${loopA.toFixed(2)}`:'')+(loopB!=null?`~${loopB.toFixed(2)}초`:'')+(view?' · '+VNAME[view]:'')+' · 바닥 노란 화살표 = 몸이 향한 방향';
   }
   G3={run:false,last:null,gy:null,
     start(){ if(!G3.run){ G3.run=true; requestAnimationFrame(frame); } },
@@ -3805,7 +3915,7 @@ function init3(){
 /* 3D 화면 녹화: 화면 공유 권한 없이 앱이 그린 3D 캔버스를 직접 녹화 */
 let REC=null;
 function recDraw(){ const {rc,ctx}=REC, cv=$('v3cv'); ctx.fillStyle='#0a0d11'; ctx.fillRect(0,0,rc.width,rc.height); ctx.drawImage(cv,0,0,rc.width,rc.height);
-  const fs=Math.max(13,Math.round(rc.width/40)), L=[$('v3t').textContent.split(' · 노란')[0],...((LASTACT&&LASTACT.lines)||[])], h=fs*1.45*L.length+fs*.6;
+  const fs=Math.max(13,Math.round(rc.width/40)), L=[$('v3t').textContent.split(' · 바닥 노란')[0],...((LASTACT&&LASTACT.lines)||[])], h=fs*1.45*L.length+fs*.6;
   ctx.fillStyle='rgba(10,13,17,.78)'; ctx.fillRect(0,rc.height-h,rc.width,h); ctx.fillStyle='#ffd23f'; ctx.font=`bold ${fs}px system-ui,sans-serif`; ctx.textBaseline='top';
   L.forEach((t,i)=>ctx.fillText(t,fs*.6,rc.height-h+fs*.4+i*fs*1.45,rc.width-fs*1.2)); }
 function recStart(){
