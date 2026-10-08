@@ -507,7 +507,7 @@ body.busy #dock{pointer-events:none;opacity:.55}
 </div>
 <div id="help" hidden role="dialog" aria-label="단축키">
   <div class="card">
-    <h3>⌨ 단축키 <small style="font-weight:400;color:var(--sub);font-size:11px">· 버전 10-08 23시</small></h3>
+    <h3>⌨ 단축키 <small style="font-weight:400;color:var(--sub);font-size:11px">· 버전 10-08 24시</small></h3>
     <table>
       <tr><td><kbd>Space</kbd></td><td>재생 / 일시정지 (프리즈 중에는 계속 재생)</td></tr>
       <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>1프레임 이동 (<kbd>Shift</kbd> 누르면 10프레임)</td></tr>
@@ -1276,14 +1276,25 @@ function kickGeom(l,W,H){ // 차는 다리 찾기 + 각도 (3D 좌표가 있으�
   const hm={x:(l[23].x+l[24].x)/2,y:(l[23].y+l[24].y)/2}, v2=(a)=>({x:(a.x-hm.x)*W,y:(a.y-hm.y)*H});
   let ang;
   const use3=$('angMode').value!=='2d'&&[23,24].every(k=>l[k].wx!=null)&&KA.wx!=null&&SA.wx!=null;
+  let cr; // 두 선의 회전 방향(어느 쪽으로 돌았는지) → 180° 넘었는지 판단용
   if(use3){ const w=(a)=>({x:a.wx-(l[23].wx+l[24].wx)/2,y:a.wy-(l[23].wy+l[24].wy)/2,z:a.wz-(l[23].wz+l[24].wz)/2}), a=w(SA), b=w(KA);
-    ang=Math.acos(Math.max(-1,Math.min(1,(a.x*b.x+a.y*b.y+a.z*b.z)/((Math.hypot(a.x,a.y,a.z)*Math.hypot(b.x,b.y,b.z))||1))))*DA; }
-  else { const a=v2(SA), b=v2(KA); ang=Math.acos(Math.max(-1,Math.min(1,(a.x*b.x+a.y*b.y)/((Math.hypot(a.x,a.y)*Math.hypot(b.x,b.y))||1))))*DA; }
-  return ang>45?{ang,kick:kk,sup:sk,hm,KA,SA,d3:use3}:null; }
+    ang=Math.acos(Math.max(-1,Math.min(1,(a.x*b.x+a.y*b.y+a.z*b.z)/((Math.hypot(a.x,a.y,a.z)*Math.hypot(b.x,b.y,b.z))||1))))*DA;
+    cr={x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x}; }
+  else { const a=v2(SA), b=v2(KA); ang=Math.acos(Math.max(-1,Math.min(1,(a.x*b.x+a.y*b.y)/((Math.hypot(a.x,a.y)*Math.hypot(b.x,b.y))||1))))*DA; cr={x:0,y:0,z:a.x*b.y-a.y*b.x}; }
+  const a2=v2(SA), b2=v2(KA), c2=a2.x*b2.y-a2.y*b2.x;
+  return ang>45?{ang,raw:ang,kick:kk,sup:sk,hm,KA,SA,d3:use3,cr,c2}:null; }
+let KANG=[]; // 장면별 발차기 각도(180° 넘는 것까지 이어서 계산한 값)
 function computeKicks(){
-  KICKS=[]; if(!track){ refreshKicks(); return; } const W=video.videoWidth,H=video.videoHeight; let cur=null;
+  KICKS=[]; KANG=[]; if(!track){ refreshKicks(); return; } const W=video.videoWidth,H=video.videoHeight; let cur=null;
+  const dot=(p,q)=>p.x*q.x+p.y*q.y+p.z*q.z;
   track.forEach((f,i)=>{ const g=kickGeom(f.lm,W,H);
-    if(g){ if(!cur||i-cur.b>Math.round(.15*AFPS)) { cur={a:i,b:i,peak:g.ang,pi:i,leg:g.kick}; KICKS.push(cur); } else { cur.b=i; if(g.ang>cur.peak){ cur.peak=g.ang; cur.pi=i; } } } });
+    if(g){ if(!cur||i-cur.b>Math.round(.15*AFPS)||cur.leg!==g.kick) { cur={a:i,b:i,peak:0,pi:i,leg:g.kick,ref:null,over:false}; KICKS.push(cur); } else cur.b=i;
+      // 다리가 올라오는 동안의 회전 방향을 기억 → 12시를 넘어 반대쪽으로 넘어가면 180°를 넘은 것
+      if(!cur.ref&&g.raw<140&&Math.hypot(g.cr.x,g.cr.y,g.cr.z)>1e-9) cur.ref=g.cr;
+      if(cur.ref&&g.raw>=140){ const sd=dot(g.cr,cur.ref); if(sd<0) cur.over=true; else if(g.raw<170) cur.over=false; }
+      else if(g.raw<140) cur.over=false;
+      const ang=cur.over?360-g.raw:g.raw; KANG[i]={ang,over:cur.over,leg:g.kick};
+      if(ang>cur.peak){ cur.peak=ang; cur.pi=i; } } });
   KICKS=KICKS.filter(k=>k.b-k.a>=Math.round(.08*AFPS)); refreshKicks(); }
 function refreshKicks(){ const el=$('kickBar'); if(!el) return;
   el.hidden=!KICKS.length||!$('kickOn').checked;
@@ -1293,13 +1304,14 @@ $('kickOn').addEventListener('change',()=>{ refreshKicks(); render(); });
 function drawKick(){
   if(!$('kickOn').checked||!pose) return;
   const W=cv.width,H=cv.height,s=sc(), g=kickGeom(pose,video.videoWidth,video.videoHeight); if(!g) return;
+  if(track){ const v=KANG[Math.round(vtime()*AFPS)]; if(v&&v.leg===g.kick&&v.over&&g.raw>=140){ g.over=true; g.ang=360-g.raw; } }
   const P=a=>({x:a.x*W,y:a.y*H}), Hm=P(g.hm), Sa=P(g.SA), Ka=P(g.KA);
   ctx.save(); ctx.lineCap='round';
   ctx.setLineDash([10*s,8*s]); ctx.lineWidth=5*s; ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.shadowColor='rgba(0,0,0,.8)'; ctx.shadowBlur=6*s;
   ctx.beginPath(); ctx.moveTo(Sa.x,Sa.y); ctx.lineTo(Hm.x,Hm.y); ctx.stroke(); ctx.setLineDash([]);
   ctx.strokeStyle='#ffd23f'; ctx.lineWidth=6*s; ctx.beginPath(); ctx.moveTo(Hm.x,Hm.y); ctx.lineTo(Ka.x,Ka.y); ctx.stroke();
   // 각도 호 (화면 기준으로 두 선 사이 안쪽)
-  const a1=Math.atan2(Sa.y-Hm.y,Sa.x-Hm.x), a2=Math.atan2(Ka.y-Hm.y,Ka.x-Hm.x); let da=a2-a1; while(da>Math.PI) da-=2*Math.PI; while(da<-Math.PI) da+=2*Math.PI;
+  const a1=Math.atan2(Sa.y-Hm.y,Sa.x-Hm.x), a2=Math.atan2(Ka.y-Hm.y,Ka.x-Hm.x); let da=a2-a1; while(da>Math.PI) da-=2*Math.PI; while(da<-Math.PI) da+=2*Math.PI; if(g.over) da=da>0?da-2*Math.PI:da+2*Math.PI; // 180° 넘으면 반대쪽(큰 쪽) 호
   const r=Math.min(70*s,Math.hypot(Ka.x-Hm.x,Ka.y-Hm.y)*.45); ctx.lineWidth=4*s; ctx.strokeStyle='rgba(255,210,63,.9)'; ctx.beginPath(); ctx.arc(Hm.x,Hm.y,r,a1,a1+da,da<0); ctx.stroke();
   ctx.shadowBlur=0;
   const i=Math.round(vtime()*AFPS), K=KICKS.find(k=>i>=k.a-2&&i<=k.b+2), mid=a1+da/2, tx=Hm.x+Math.cos(mid)*(r+44*s), ty=Hm.y+Math.sin(mid)*(r+44*s);
@@ -1943,7 +1955,7 @@ function pickUI(snap,ps){
     $('pickAll').onclick=()=>{ if(sel.size===ps.length) sel.clear(); else ps.forEach(p=>sel.add(p.id)); draw(); };
     $('pickGo').onclick=()=>done([...sel]);
     $('pickCancel').onclick=()=>done(null);
-    $('pickTxt').innerHTML=`🧑‍🤝‍🧑 화면에 <b>${ps.length}명</b>이 보여요. 분석할 사람을 눌러 고르세요<br><span class="sub">한 명만도, 여러 명도 고를 수 있어요 · 버전 10-08 23시</span>`;
+    $('pickTxt').innerHTML=`🧑‍🤝‍🧑 화면에 <b>${ps.length}명</b>이 보여요. 분석할 사람을 눌러 고르세요<br><span class="sub">한 명만도, 여러 명도 고를 수 있어요 · 버전 10-08 24시</span>`;
     box.hidden=false; fit(); window.addEventListener('resize',fit); draw();
   });
 }
