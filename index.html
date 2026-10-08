@@ -289,13 +289,6 @@ body.busy #dock{pointer-events:none;opacity:.55}
     <div id="fsListBox"></div>
   </div>
 </div>
-<div id="muPanel" class="sec" hidden>
-  <div class="secT">🫀 인체·근육 모드</div>
-  <div class="sub">🟡 주동근 · 🟢 보조근 · 🔴 그 외 근육 (영상 동작으로 추정한 값이에요)</div>
-  <div id="muNow"></div>
-  <div id="muInfo"></div>
-  <div id="muChips"></div>
-</div>
 <video id="tv" playsinline muted preload="auto"></video>
 
 <div id="ctrls">
@@ -325,6 +318,13 @@ body.busy #dock{pointer-events:none;opacity:.55}
   <label class="chk"><input type="checkbox" id="loopOn"> 반복</label><button id="loopClr" title="구간 지우기">✕</button>
 </div>
 
+<div id="muPanel" class="sec" hidden>
+  <div class="secT">🫀 인체·근육 모드</div>
+  <div class="sub">🟡 주동근 · 🟢 보조근 · 🔴 그 외 근육 (영상 동작으로 추정한 값이에요)</div>
+  <div id="muNow"></div>
+  <div id="muInfo"></div>
+  <div id="muChips"></div>
+</div>
 <details class="pan" open>
 <summary class="secS" style="margin:0">🎨 그리기 설정 <span class="sub" style="font-weight:400">(도구는 영상 왼쪽 ✏️ 버튼)</span></summary>
 
@@ -2975,12 +2975,12 @@ function bodyFrame(S){
 /* 근육 데이터: seg(붙는 뼈대) a~b(구간) d(바깥 방향 f앞 b뒤 o바깥 i안) off(뼈에서 떨어진 정도) r(굵기) */
 const MU=[
  {id:'delt',n:'삼각근',g:'어깨·팔',seg:'ua',a:-.02,b:.5,d:{o:1,f:.15},off:.035,r:.05,pos:'어깨를 둥글게 덮은 근육 (기시: 쇄골·견봉·견갑극 / 정지: 위팔뼈 바깥)',act:'팔을 앞·옆·뒤로 들어 올려요',tip:'지르기에서 팔을 앞으로 뻗고, 막기에서 팔을 들어 올릴 때 써요.'},
- {id:'pec',n:'대흉근',g:'몸통(앞)',seg:'k',a:.78,b:.78,d:{f:1,o:.7},off:.12,r:.055,along:'lat',hl:.1,pos:'가슴 앞쪽 부채꼴 근육 (기시: 쇄골·가슴뼈·갈비연골 / 정지: 위팔뼈 위쪽)',act:'팔을 앞으로 모으고 안쪽으로 돌려요',tip:'지르기 마지막에 팔을 앞으로 밀어낼 때 크게 써요.'},
+ {id:'pec',n:'대흉근',g:'몸통(앞)',seg:'k',a:.7,b:.7,d:{f:1,o:.7},off:.11,r:.045,along:'lat',hl:.07,pos:'가슴 앞쪽 부채꼴 근육 (기시: 쇄골·가슴뼈·갈비연골 / 정지: 위팔뼈 위쪽)',act:'팔을 앞으로 모으고 안쪽으로 돌려요',tip:'태권도 동작에서는 거의 쓰지 않아요. (해부학상 위치만 회색으로 보여 줘요)'},
  {id:'bic',n:'상완이두근',g:'어깨·팔',seg:'ua',a:.15,b:.92,d:{f:1},off:.032,r:.03,pos:'위팔 앞쪽 (기시: 견갑골 / 정지: 아래팔 노뼈 위쪽)',act:'팔꿈치를 굽히고 손바닥을 위로 돌려요',tip:'주먹을 허리로 당길 때, 팔을 접어 막을 때 써요.'},
  {id:'tri',n:'상완삼두근',g:'어깨·팔',seg:'ua',a:.1,b:.92,d:{b:1},off:.032,r:.034,pos:'위팔 뒤쪽 (기시: 견갑골·위팔뼈 뒤 / 정지: 팔꿈치 뼈 끝)',act:'팔꿈치를 펴요',tip:'지르기에서 팔을 쭉 펴 주먹을 내미는 주인공이에요.'},
  {id:'fflx',n:'전완굴근',g:'어깨·팔',seg:'fa',a:.05,b:.75,d:{f:1,i:.3},off:.026,r:.024,pos:'아래팔 안쪽·앞쪽 (기시: 위팔뼈 안쪽 / 정지: 손목·손가락뼈)',act:'손목과 손가락을 굽혀 주먹을 쥐어요',tip:'주먹을 꽉 쥐고 손목을 고정할 때 써요.'},
  {id:'fext',n:'전완신근',g:'어깨·팔',seg:'fa',a:.05,b:.75,d:{b:1,o:.3},off:.026,r:.022,pos:'아래팔 바깥·뒤쪽 (기시: 위팔뼈 바깥 / 정지: 손등·손가락뼈)',act:'손목과 손가락을 펴요',tip:'지르기 순간 손목이 꺾이지 않게 잡아 줘요.'},
- {id:'trap',n:'승모근',g:'몸통(뒤)',seg:'k',a:.95,b:.95,d:{b:1,o:.3},off:.06,r:.045,along:'lat',hl:.12,pos:'목에서 등 위쪽까지 걸친 마름모 근육 (기시: 뒤통수·목뼈·등뼈 / 정지: 쇄골·어깨뼈)',act:'어깨를 으쓱 올리고 어깨뼈를 모아요',tip:'어깨가 올라가지 않게 눌러 주고, 팔을 당길 때 써요.'},
+ {id:'trap',n:'승모근',g:'몸통(뒤)',seg:'k',a:.95,b:.95,d:{b:1,o:.3},off:.05,r:.035,along:'lat',hl:.08,pos:'목에서 등 위쪽까지 걸친 마름모 근육 (기시: 뒤통수·목뼈·등뼈 / 정지: 쇄골·어깨뼈)',act:'어깨를 으쓱 올리고 어깨뼈를 모아요',tip:'어깨가 올라가지 않게 눌러 주고, 팔을 당길 때 써요.'},
  {id:'lat',n:'광배근',g:'몸통(뒤)',seg:'k',a:.2,b:.78,d:{b:1,o:.6},off:.09,r:.075,pos:'등 옆에서 아래로 넓게 퍼진 근육 (기시: 허리뼈·골반 / 정지: 위팔뼈 앞쪽)',act:'팔을 몸 쪽으로 당기고 뒤로 보내요',tip:'지르는 반대 주먹을 허리로 당기는 힘이 여기서 나와요.'},
  {id:'rect',n:'복직근',g:'몸통(앞)',seg:'k',a:.06,b:.62,d:{f:1,o:.22},off:.075,r:.035,pos:'배 앞 가운데 세로 근육 (기시: 치골 / 정지: 가슴뼈·갈비연골)',act:'상체를 숙이고 배를 단단히 잡아요',tip:'차기와 지르기 끝에서 몸통을 단단히 잡아 힘이 새지 않게 해요.'},
  {id:'obl',n:'복사근',g:'몸통(앞)',seg:'k',a:.1,b:.62,d:{o:1,f:.4},off:.1,r:.05,pos:'옆구리를 비스듬히 감싼 근육 (기시: 아래 갈비뼈 / 정지: 골반·복부 중앙선)',act:'몸통을 돌리고 옆으로 굽혀요',tip:'돌려차기·지르기의 허리 회전 엔진이에요.'},
@@ -3000,10 +3000,10 @@ const MU=[
  {id:'sol',n:'가자미근',g:'종아리·발',seg:'s',a:.3,b:.85,d:{b:1},off:.035,r:.028,pos:'비복근 아래 깊은 곳 (기시: 종아리뼈·정강이뼈 위 / 정지: 아킬레스건)',act:'발목을 아래로 눌러 발끝으로 밀어요',tip:'서 있는 동안 계속 일하며 균형을 잡아요.'},
  {id:'tib',n:'전경골근',g:'종아리·발',seg:'s',a:.08,b:.85,d:{f:1,o:.3},off:.035,r:.02,pos:'정강이 앞쪽 (기시: 정강이뼈 바깥 위 / 정지: 발 안쪽 뼈)',act:'발끝을 들어 올려요',tip:'차기에서 발끝을 당기고 착지할 때 발을 들어 줘요.'}];
 const RULES=[
- {id:'shFlex',label:'어깨관절 굴곡(팔 앞으로)',P:['delt','pec'],S:['bic']},
+ {id:'shFlex',label:'어깨관절 굴곡(팔 앞으로)',P:['delt'],S:['bic']},
  {id:'shExt',label:'어깨관절 신전(팔 뒤로)',P:['lat','tri'],S:['delt']},
  {id:'shAbd',label:'어깨관절 외전(팔 옆으로)',P:['delt','trap'],S:[]},
- {id:'shAdd',label:'어깨관절 내전(팔 모으기)',P:['pec','lat'],S:[]},
+ {id:'shAdd',label:'어깨관절 내전(팔 모으기)',P:['lat'],S:[]},
  {id:'elFlex',label:'팔꿈치 굴곡',P:['bic'],S:['fflx']},
  {id:'elExt',label:'팔꿈치 신전',P:['tri'],S:['fext']},
  {id:'hipFlex',label:'엉덩관절 굴곡',P:['psoas','rf'],S:['tfl','sart']},
@@ -3025,7 +3025,7 @@ function muGeom(m,S,SS,F){
   if(d.f) dv=VM.add(dv,VM.mul(F.fr,d.f)); if(d.b) dv=VM.add(dv,VM.mul(F.fr,-d.b)); if(d.o) dv=VM.add(dv,VM.mul(F.lr,sg*d.o)); if(d.i) dv=VM.add(dv,VM.mul(F.lr,-sg*d.i));
   dv=VM.nrm(dv);
   const c=VM.add(VM.add(A,VM.mul(ax,(m.a+m.b)/2)),VM.mul(dv,m.off*k)), lat=m.along==='lat';
-  return {c,dv,dir:lat?VM.mul(F.lr,sg):VM.nrm(ax),half:lat?m.hl*k:len*(m.b-m.a)*.55,rad:m.r*k};
+  return {c,c0:VM.add(A,VM.mul(ax,(m.a+m.b)/2)),o:VM.mul(dv,m.off*k),dv,dir:lat?VM.mul(F.lr,sg):VM.nrm(ax),half:lat?m.hl*k:len*(m.b-m.a)*.55,rad:m.r*k};
 }
 /* 관절 각도(3D) → 어떤 근육이 일하는지 추정 */
 function angsP(p){
@@ -3060,7 +3060,6 @@ function muAct(p){
 /* 근육별 운동: [이름, 종류(힘·속도·파워), 한 줄 설명] — 파워 = 힘 × 속도 */
 const MUEX={
  delt:[['덤벨 숄더프레스','힘','어깨 힘의 기본'],['밴드 빠른 지르기','속도','밴드 걸고 앞으로 번개처럼'],['메디신볼 오버헤드 슬램','파워','머리 위에서 폭발적으로 내리치기']],
- pec:[['푸시업','힘','가슴·삼두 기본 힘'],['밴드 체스트 프레스 빠르게','속도','밀어낼 때 최대한 빠르게'],['클랩 푸시업','파워','폭발적으로 밀어 올려 박수']],
  bic:[['덤벨 컬','힘','팔꿈치 굽히는 힘'],['밴드 인수(당기기) 빠르게','속도','주먹 당기는 속도'],['풀업 폭발 올라가기','파워','올라갈 때 최대한 빠르게']],
  tri:[['딥스','힘','팔 펴는 힘'],['밴드 푸시다운 빠르게','속도','쭉 펴는 속도'],['클로즈그립 클랩 푸시업','파워','지르기 폭발력']],
  fflx:[['리스트 컬','힘','손목 굽힘 힘'],['악력기 빠르게 쥐기','속도','주먹 쥐는 속도'],['파머스 워크','힘','무거운 걸 들고 걷기(악력)']],
@@ -3114,16 +3113,17 @@ function drawBodyMuscles(){
   const prj=q=>({x:(q.x/SS.SC+SS.X0)/SS.VW*W,y:(-q.y/SS.SC+SS.Y0)/SS.VH*H});
   const items=[];
   ['L','R'].forEach(S=>MU.forEach(m=>{
+    if(m.id==='psoas'||m.id==='sol') return; // 몸속 깊은 근육은 영상 위에는 그리지 않아요
     const g=muGeom(m,S,SS,F); if(!g||g.dv.z<-.25) return;
-    const c=prj(g.c), p1=prj(VM.add(g.c,VM.mul(g.dir,-g.half))), p2=prj(VM.add(g.c,VM.mul(g.dir,g.half)));
-    const hw=Math.max(2*s,g.rad/SS.SC*kp), hl=Math.max(Math.hypot(p2.x-p1.x,p2.y-p1.y)/2,hw*.8), ang=Math.atan2(p2.y-p1.y,p2.x-p1.x);
-    items.push({id:m.id,S,m,cx:c.x,cy:c.y,hl,hw,ang,z:g.c.z});
+    const gc=VM.add(g.c0,VM.mul(g.o,.55)), c=prj(gc), p1=prj(VM.add(gc,VM.mul(g.dir,-g.half*.9))), p2=prj(VM.add(gc,VM.mul(g.dir,g.half*.9)));
+    const hw=Math.max(2*s,g.rad*.6/SS.SC*kp), hl=Math.max(Math.hypot(p2.x-p1.x,p2.y-p1.y)/2,hw*.8), ang=Math.atan2(p2.y-p1.y,p2.x-p1.x);
+    items.push({id:m.id,S,m,cx:c.x,cy:c.y,hl,hw,ang,z:gc.z});
   }));
   items.sort((a,b)=>a.z-b.z);
   ctx.save();
   items.forEach(it=>{ const r=act.map[it.S+it.id], sel=MSEL&&MSEL.id===it.id&&MSEL.S===it.S;
     ctx.beginPath(); ctx.ellipse(it.cx,it.cy,it.hl,it.hw,it.ang,0,Math.PI*2);
-    ctx.fillStyle=sel?MUCOL.sel:r?(r.role==='P'?MUCOL.P:MUCOL.S):MUCOL.base; ctx.fill();
+    ctx.fillStyle=sel?MUCOL.sel:r?(r.role==='P'?MUCOL.P:MUCOL.S):it.id==='pec'?'rgba(170,170,170,.28)':MUCOL.base; ctx.fill();
     ctx.lineWidth=(sel?3:1.2)*s; ctx.strokeStyle=sel?'#fff':'rgba(70,12,6,.65)'; ctx.stroke(); });
   const sl=items.find(it=>MSEL&&MSEL.id===it.id&&MSEL.S===it.S);
   if(sl){ ctx.textAlign='center'; label(sl.m.n,sl.cx,sl.cy-sl.hw-14*s,'#fff',20*s); ctx.textAlign='left'; }
