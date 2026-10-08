@@ -87,6 +87,12 @@ body.busy #save2{pointer-events:none;opacity:.5}
 #v3m{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:#cfd6df;font-size:14px;line-height:1.6;pointer-events:none}
 .v3r{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
 #v3t{font-size:12px;color:var(--sub);margin-top:4px}
+#v3i{position:absolute;left:8px;right:8px;bottom:8px;max-height:55%;overflow:auto;background:rgba(14,18,24,.94);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.65;color:#dfe6ee;touch-action:pan-y;cursor:default}
+#v3i b{display:block;margin-top:6px;font-size:14px}
+#v3i b:first-child{margin-top:0}
+#v3i button{float:right;padding:3px 9px;font-size:12px;margin:-2px 0 4px 8px}
+#v3i .tm{border-top:1px solid #2c3643;margin-top:8px;padding-top:6px}
+#v3mu{font-size:12px;line-height:1.55;white-space:pre-line;margin-top:4px;color:var(--text);min-height:18px}
 /* ===== PRO 다듬기 ===== */
 body{max-width:1000px;margin:0 auto;padding-top:0}
 header.app{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:20;background:rgba(15,19,24,.94);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);padding:calc(8px + env(safe-area-inset-top,0px)) 2px 8px;margin:0 -2px 6px;border-bottom:1px solid var(--line)}
@@ -424,14 +430,14 @@ body.busy #dock{pointer-events:none;opacity:.55}
 <div id="v3" hidden>
   <div class="v3h"><b>🧊 3D 동작 보기</b>
     <button class="pc" data-p="s" style="--k:#5b93ff" aria-pressed="true">시상면</button><button class="pc" data-p="c" style="--k:#38c486" aria-pressed="true">관상면</button><button class="pc" data-p="t" style="--k:#ff6b64" aria-pressed="true">수평면</button>
-    <button id="v3x" aria-label="닫기">✕ 닫기</button></div>
-  <div id="v3w"><canvas id="v3cv"></canvas><div id="v3m"></div></div>
+    <button id="v3g">📖 용어</button><button id="v3x" aria-label="닫기">✕ 닫기</button></div>
+  <div id="v3w"><canvas id="v3cv"></canvas><div id="v3m"></div><div id="v3i" hidden></div></div>
   <div><input id="v3seek" type="range" min="0" max="1000" value="0" style="width:100%;margin-top:8px">
     <div class="v3r"><button id="v3prev">◀ 1프레임</button><button id="v3play">▶ 재생</button><button id="v3next">1프레임 ▶</button>
       <select id="v3rate" title="재생 속도"></select>
       <button id="v3A">A 시작</button><button id="v3B">B 끝</button><label class="chk"><input type="checkbox" id="v3loop"> 구간 반복</label></div>
-    <div class="v3r"><button data-v="0,1.4">정면</button><button data-v="1.5708,1.4">옆면</button><button data-v="0,.05">위에서</button><button data-v="2.4,1.2">입체</button></div>
-    <div id="v3t"></div></div>
+    <div class="v3r"><button data-v="0,1.4">정면</button><button data-v="1.5708,1.4">옆면</button><button data-v="0,.05">위에서</button><button data-v="2.4,1.2">입체</button><button id="v3mon" aria-pressed="true">💪 근육 표시</button><button id="v3mt">📋 근육표</button><button id="v3rec">⏺ 3D 녹화</button></div>
+    <div id="v3t"></div><div id="v3mu"></div></div>
 </div>
 <div id="cfm" hidden><div class="card" role="dialog" aria-modal="true"><p id="cfmT"></p><div class="acts"><button id="cfmN">취소</button><button id="cfmY" class="on">확인</button></div></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
@@ -2911,6 +2917,55 @@ $('cfmN').onclick=()=>{ $('cfm').hidden=true; cfmFn=null; };
 $('shot').onclick=()=>{ if(!video.videoWidth){ toast('먼저 영상을 불러오세요'); return; } askSave('현재 화면을 이미지로 저장할까요?',shotNow); };
 $('save2').onclick=()=>{ if(!video.src){ toast('먼저 영상을 불러오세요'); return; } askSave('피드백 영상을 저장할까요?\n(영상 길이만큼 시간이 걸려요)',()=>$('save').click()); };
 /* ---------- 3D 동작 보기 (분석한 관절 움직임을 입체로) ---------- */
+const PLN={s:'시상면',c:'관상면',t:'수평면'};
+const TERM_LIST=[
+ {id:'flex',p:'s',n:'굴곡(굽힘)',c:'#5b93ff',t:'관절의 각도가 작아지는 움직임이에요. 무릎·팔꿈치를 접거나, 앞차기 준비 때 무릎을 끌어올리는 동작이에요.'},
+ {id:'ext',p:'s',n:'신전(폄)',c:'#5b93ff',t:'접었던 관절의 각도가 커지는 움직임이에요. 앞차기에서 무릎을 쭉 펴 내미는 동작이에요.'},
+ {id:'abd',p:'c',n:'외전(벌림)',c:'#38c486',t:'팔다리가 몸의 중심선에서 멀어지는 움직임이에요. 옆차기에서 다리를 옆으로 들어 올리거나 팔을 옆으로 벌리는 동작이에요.'},
+ {id:'add',p:'c',n:'내전(모음)',c:'#38c486',t:'벌렸던 팔다리가 중심선 쪽으로 돌아오는 움직임이에요. 벌린 다리를 다시 모을 때 쓰여요.'},
+ {id:'rot',p:'t',n:'회전(돌림)',c:'#ff6b64',t:'몸통·골반·팔다리가 몸의 세로 축을 따라 도는 움직임이에요. 돌려차기에서 골반과 몸통을 돌리는 동작이 대표적이고, 팔다리는 안쪽돌림·바깥돌림으로 나눠 말해요.'}];
+let TDEL=new Set(); try{ TDEL=new Set(JSON.parse(localStorage.getItem('coachPro.termDel')||'[]')); }catch(e){}
+const saveDel=()=>{ try{ localStorage.setItem('coachPro.termDel',JSON.stringify([...TDEL])); }catch(e){} };
+let curI=null;
+const termHtml=(x,del)=>`<div class="tm">${del?`<button data-d="${x.id}">삭제</button>`:''}<b style="color:${x.c}">${x.n}</b>${x.t}</div>`;
+function showI(html){ const e=$('v3i'); e.innerHTML='<button data-c="1">닫기</button>'+html; e.hidden=false;
+  e.onclick=ev=>{ const d=ev.target.dataset; if(!d) return;
+    if(d.c){ e.hidden=true; curI=null; }
+    else if(d.d){ const x=TERM_LIST.find(q=>q.id===d.d); askSave(`「${x.n}」 용어를 삭제할까요?`,()=>{ TDEL.add(x.id); saveDel(); renderI(); }); }
+    else if(d.m){ const x=RULES.find(q=>q.id===d.m); askSave(`「${x.label}」 항목을 삭제할까요?`,()=>{ MDEL.add(x.id); saveM(); renderI(); }); }
+    else if(d.r){ if(curI==='m'){ MDEL.clear(); saveM(); } else { TDEL.clear(); saveDel(); } renderI(); } }; }
+function renderI(){ if(!curI) return;
+  if(curI==='m'){ const l=RULES.filter(r=>!MDEL.has(r.id));
+    showI('<b>근육 판단표 (영상으로 추정)</b>동작마다 어떤 근육을 주동근(노랑)·보조근(초록)으로 보여 줄지 정한 표예요. 맞지 않는 항목은 삭제해 주세요.'+(l.length?l.map(r=>`<div class="tm"><button data-m="${r.id}">삭제</button><b style="color:#ffd23f">${r.label}</b>주동 ${r.P.map(nm).join('·')} / 보조 ${r.S.length?r.S.map(nm).join('·'):'없음'}</div>`).join(''):'<div class="tm">남은 항목이 없어요.</div>')+(MDEL.size?'<button data-r="1" style="float:none;margin-top:8px">삭제한 항목 모두 되돌리기</button>':'')); return; }
+  if(curI==='g'){ const l=TERM_LIST.filter(x=>!TDEL.has(x.id));
+    showI('<b>움직임 용어 목록</b>필요 없는 용어는 삭제를 눌러 지울 수 있어요.'+(l.length?l.map(x=>termHtml(x,true)).join(''):'<div class="tm">남은 용어가 없어요.</div>')+(TDEL.size?'<button data-r="1" style="float:none;margin-top:8px">삭제한 용어 모두 되돌리기</button>':'')); }
+  else { const l=TERM_LIST.filter(x=>x.p===curI&&!TDEL.has(x.id));
+    showI('<b>'+PLN[curI]+(l.length?' · '+l.map(x=>x.n.replace(/\(.*\)/,'')).join('과 '):'')+'</b>'+(l.length?l.map(x=>termHtml(x,false)).join(''):'이 면의 용어를 모두 삭제했어요. 📖 용어에서 되돌릴 수 있어요.')); } }
+/* 근육 표시 (영상 관절 움직임으로 추정) */
+const MU=[
+ {id:'psoas',n:'엉덩허리근',seg:'t',a:0,b:.3,d:{f:1},off:.035,r:.032},
+ {id:'rf',n:'대퇴직근',seg:'t',a:.05,b:.95,d:{f:1},off:.04,r:.03},
+ {id:'vasti',n:'대퇴사두근(광근)',seg:'t',a:.25,b:.95,d:{f:1,o:.7},off:.045,r:.04},
+ {id:'tfl',n:'대퇴근막장근',seg:'t',a:0,b:.35,d:{o:1,f:.4},off:.05,r:.025},
+ {id:'sart',n:'봉공근',seg:'t',a:0,b:.8,d:{f:1,i:.6},off:.045,r:.018},
+ {id:'gmax',n:'대둔근',seg:'t',a:-.05,b:.3,d:{b:1,o:.3},off:.07,r:.06},
+ {id:'gmed',n:'중둔근',seg:'t',a:-.15,b:.15,d:{o:1,b:.3},off:.065,r:.045},
+ {id:'ham',n:'햄스트링',seg:'t',a:.1,b:.95,d:{b:1},off:.05,r:.035},
+ {id:'add',n:'내전근',seg:'t',a:.05,b:.7,d:{i:1},off:.05,r:.035},
+ {id:'gas',n:'비복근',seg:'s',a:0,b:.6,d:{b:1},off:.045,r:.035},
+ {id:'obl',n:'복사근',seg:'k',a:.1,b:.8,d:{o:1,f:.3},off:.1,r:.05},
+ {id:'erec',n:'척추기립근',seg:'k',a:0,b:.95,d:{b:1,o:.35},off:.08,r:.035}];
+const RULES=[
+ {id:'hipFlex',label:'엉덩관절 굴곡',P:['psoas','rf'],S:['tfl','sart']},
+ {id:'hipExt',label:'엉덩관절 신전',P:['gmax','ham'],S:['add']},
+ {id:'hipAbd',label:'엉덩관절 외전',P:['gmed','tfl'],S:['gmax']},
+ {id:'hipAdd',label:'엉덩관절 내전',P:['add'],S:[]},
+ {id:'kneeFlex',label:'무릎 굴곡',P:['ham'],S:['gas','sart']},
+ {id:'kneeExt',label:'무릎 신전',P:['vasti','rf'],S:['tfl']},
+ {id:'trunkRot',label:'몸통 회전',P:['obl'],S:['erec']}];
+const TY={con:'단축성',ecc:'신장성',iso:'등척성'}, nm=id=>MU.find(m=>m.id===id).n;
+let MDEL=new Set(), MUon=true; try{ MDEL=new Set(JSON.parse(localStorage.getItem('coachPro.musDel')||'[]')); }catch(e){}
+const saveM=()=>{ try{ localStorage.setItem('coachPro.musDel',JSON.stringify([...MDEL])); }catch(e){} };
 let G3=null;
 const BN3=[[11,12],[11,23],[12,24],[23,24],[11,13],[13,15],[12,14],[14,16],[23,25],[25,27],[24,26],[26,28],[27,29],[29,31],[27,31],[28,30],[30,32],[28,32]], JT3=[11,12,13,14,15,16,23,24,25,26,27,28,29,30,31,32];
 function load3(){ return new Promise((ok,no)=>{ if(window.THREE) return ok(); const t=document.createElement('script'); t.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'; t.onload=ok; t.onerror=()=>no(new Error('3D 라이브러리를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.')); document.head.appendChild(t); }); }
@@ -2928,6 +2983,40 @@ function init3(){
   const nose=new TH.Mesh(new TH.ConeGeometry(.03,.1,10),new TH.MeshLambertMaterial({color:0xffd23f})); sc.add(nose);
   let VW=1,VH=1,X0=0,Y0=0,SC=0,ZS=1; const HZ={}; // 위치는 영상 속 2D 관절(화면과 동일), 깊이만 3D 값 사용
   const V=(p,i)=>{ const q=p[i]; if(!q||q.x==null||!SC) return null; let z; if(q.wz!=null&&(q.visibility??1)>.35){ z=-q.wz*ZS; HZ[i]=z; } else z=HZ[i]??0; return new TH.Vector3((q.x*VW-X0)*SC,-(q.y*VH-Y0)*SC,z); }, Y=new TH.Vector3(0,1,0);
+  const cyl=new TH.CylinderGeometry(1,1,1,12), mat=(c,o)=>new TH.MeshLambertMaterial({color:c,transparent:true,opacity:o,depthWrite:false}), MP=mat(0xffd23f,.85), MS2=mat(0x38c486,.75), MN=mat(0xaab4c0,.06), LC={};
+  const lab=t=>LC[t]||(LC[t]=(()=>{ const c=document.createElement('canvas'); c.width=340; c.height=60; const g=c.getContext('2d'); g.fillStyle='rgba(20,24,30,.88)'; g.fillRect(0,0,340,60); g.fillStyle='#ffd23f'; g.font='bold 27px system-ui,sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(t,170,31); return new TH.CanvasTexture(c); })());
+  const MS=[]; ['L','R'].forEach(S=>MU.forEach(m=>{ const mesh=new TH.Mesh(cyl,MN), spr=new TH.Sprite(new TH.SpriteMaterial({transparent:true,depthTest:false})); spr.scale.set(.62,.11,1); mesh.visible=spr.visible=false; sc.add(mesh,spr); MS.push({S,m,mesh,spr}); }));
+  const DA=180/Math.PI, dfa=(x,y)=>{ let e=x-y; while(e>180) e-=360; while(e<-180) e+=360; return e; };
+  function angs(p){ if(!p) return null; const LH=V(p,23),RH=V(p,24),LS=V(p,11),RS=V(p,12); if(!(LH&&RH&&LS&&RS)) return null;
+    const lr=LH.clone().sub(RH).normalize(), up=LS.clone().add(RS).sub(LH).sub(RH).multiplyScalar(.5); up.addScaledVector(lr,-up.dot(lr)).normalize(); const fr=new TH.Vector3().crossVectors(lr,up), o={};
+    [['L',23,25,27,1],['R',24,26,28,-1]].forEach(([S,h,k,a,sg])=>{ const H=V(p,h),K=V(p,k),A=V(p,a); if(!H||!K||!A){ o[S]=null; return; }
+      const d=K.clone().sub(H), x=d.dot(lr)*sg, y=d.dot(up), z=d.dot(fr), t1=H.clone().sub(K).normalize(), t2=A.clone().sub(K).normalize();
+      o[S]={hf:Math.atan2(z,-y)*DA,ha:Math.atan2(x,-y)*DA,kf:180-Math.acos(Math.max(-1,Math.min(1,t1.dot(t2))))*DA}; });
+    const sv=LS.clone().sub(RS), hv=LH.clone().sub(RH); o.tr=Math.atan2(sv.x*hv.z-sv.z*hv.x,sv.x*hv.x+sv.z*hv.z)*DA; return o; }
+  function muState(p){ const d=.1,T=video.currentTime,A0=angs(p),A1=angs(poseAt(track,Math.max(0,T-d))),A2=angs(poseAt(track,Math.max(0,T-2*d))), map={}, lines=[]; if(!A0||!A1||!A2) return {map,lines};
+    const put=(S0,r,type)=>{ if(!r||MDEL.has(r.id)) return; (r.id==='trunkRot'?['L','R']:[S0]).forEach(S=>{ r.S.forEach(id=>{ if(!map[S+id]) map[S+id]={role:'S',type}; }); r.P.forEach(id=>{ map[S+id]={role:'P',type}; }); });
+      lines.push((r.id==='trunkRot'?'':(S0==='L'?'왼쪽 ':'오른쪽 '))+r.label+' · '+TY[type]+' — 주동 '+r.P.map(nm).join('·')+(r.S.length?' / 보조 '+r.S.map(nm).join('·'):'')); };
+    const R=id=>RULES.find(r=>r.id===id);
+    const axis=(S,get,pos,neg,hold)=>{ const v0=get(A0),v1=get(A1),v2=get(A2); if(v0==null||v1==null||v2==null) return; const w=dfa(v0,v1)/d, w1=dfa(v1,v2)/d;
+      if(Math.abs(w)>45){ const dec=Math.sign(w)===Math.sign(w1)&&Math.abs(w)<.8*Math.abs(w1); // 속도가 줄어드는 중이면 반대쪽 근육이 늘어나며 브레이크
+        if(neg) put(S,R(dec?(w>0?neg:pos):(w>0?pos:neg)),dec?'ecc':'con'); else put(S,R(pos),dec?'ecc':'con'); }
+      else if(hold&&v0>hold[0]) put(S,R(hold[1]),'iso'); };
+    ['L','R'].forEach(S=>{ if(!A0[S]||!A1[S]||!A2[S]) return;
+      axis(S,a=>a[S]&&a[S].hf,'hipFlex','hipExt',[45,'hipFlex']); axis(S,a=>a[S]&&a[S].ha,'hipAbd','hipAdd',[30,'hipAbd']); axis(S,a=>a[S]&&a[S].kf,'kneeFlex','kneeExt',[60,'kneeFlex']); });
+    axis('L',a=>a.tr,'trunkRot',null,null); return {map,lines}; }
+  function muUpd(p){ const mu=$('v3mu');
+    if(!MUon){ mu.textContent=''; return; }
+    if(!track){ mu.textContent='근육 표시는 "⚡ 동작 정밀 분석" 후에 나와요.'; return; }
+    const st=muState(p), q=body.quaternion, LR=new TH.Vector3(1,0,0).applyQuaternion(q), FR=new TH.Vector3(0,0,1).applyQuaternion(q);
+    MS.forEach(o=>{ const {S,m}=o, sg=S==='L'?1:-1, i=S==='L'; let A,B;
+      if(m.seg==='t'){ A=V(p,i?23:24); B=V(p,i?25:26); } else if(m.seg==='s'){ A=V(p,i?25:26); B=V(p,i?27:28); } else { A=V(p,i?23:24); B=V(p,i?11:12); }
+      if(!A||!B) return; const ax=B.clone().sub(A), len=ax.length(), k=len/(m.seg==='k'?.5:.42), dv=new TH.Vector3();
+      if(m.d.f) dv.addScaledVector(FR,m.d.f); if(m.d.b) dv.addScaledVector(FR,-m.d.b); if(m.d.o) dv.addScaledVector(LR,sg*m.d.o); if(m.d.i) dv.addScaledVector(LR,-sg*m.d.i); dv.normalize();
+      const c=A.clone().addScaledVector(ax,(m.a+m.b)/2).addScaledVector(dv,m.off*k), r=st.map[S+m.id];
+      o.mesh.visible=true; o.mesh.position.copy(c); o.mesh.scale.set(m.r*k,len*(m.b-m.a),m.r*k); o.mesh.quaternion.setFromUnitVectors(Y,ax.normalize());
+      o.mesh.material=r?(r.role==='P'?MP:MS2):MN;
+      if(r&&r.role==='P'){ o.spr.visible=true; o.spr.material.map=lab(m.n+' '+TY[r.type]); o.spr.material.needsUpdate=true; o.spr.position.copy(c).addScaledVector(LR,sg*.24); } });
+    mu.textContent=(st.lines.length?st.lines.join('\n'):'뚜렷한 근육 움직임이 없는 순간이에요.')+'\n※ 영상으로 추정한 값이에요.'; }
   let th=0,ph=1.4,rad=3.2,tg=null,lw=0,lh=0; const pt=new Map(); let pd=0;
   const w=$('v3w');
   w.addEventListener('pointerdown',e=>{ pt.set(e.pointerId,[e.clientX,e.clientY]); w.setPointerCapture(e.pointerId); tg=null; });
@@ -2938,7 +3027,7 @@ function init3(){
   ['pointerup','pointercancel'].forEach(n=>w.addEventListener(n,e=>{ pt.delete(e.pointerId); pd=0; }));
   w.addEventListener('wheel',e=>{ e.preventDefault(); rad=Math.min(8,Math.max(1.5,rad*(1+e.deltaY*.001))); },{passive:false});
   document.querySelectorAll('#v3 [data-v]').forEach(b=>b.onclick=()=>{ const v=b.dataset.v.split(',').map(Number); tg=v; });
-  document.querySelectorAll('#v3 .pc').forEach(b=>b.onclick=()=>{ const on=b.getAttribute('aria-pressed')!=='true'; b.setAttribute('aria-pressed',on); PL[b.dataset.p].visible=on; });
+  document.querySelectorAll('#v3 .pc').forEach(b=>b.onclick=()=>{ const on=b.getAttribute('aria-pressed')!=='true'; b.setAttribute('aria-pressed',on); PL[b.dataset.p].visible=on; if(on){ curI=b.dataset.p; renderI(); } else { $('v3i').hidden=true; curI=null; } });
   function frame(){
     if($('v3').hidden) { G3.run=false; return; } requestAnimationFrame(frame);
     const W=w.clientWidth,H=w.clientHeight; if(W!==lw||H!==lh){ lw=W; lh=H; R.setSize(W,H,false); cam.aspect=W/H; cam.updateProjectionMatrix(); }
@@ -2951,7 +3040,7 @@ function init3(){
       if(!SC){ const tl=Math.hypot(((p[11].x+p[12].x)-(p[23].x+p[24].x))/2*VW,((p[11].y+p[12].y)-(p[23].y+p[24].y))/2*VH); SC=tl?hc*.29/tl:0; }
       ZS=hc/1.7; }
     $('v3m').textContent=ok?'':(video.src?(track?'이 순간에는 사람이 인식되지 않았어요.':'먼저 "⚡ 동작 정밀 분석"을 실행하거나 "🦴 관절 표시"를 켜 주세요.'):'먼저 영상을 불러오세요.');
-    bones.forEach(o=>o.m.visible=false); jm.forEach(m=>m.visible=false); head.visible=false; nose.visible=false;
+    bones.forEach(o=>o.m.visible=false); jm.forEach(m=>m.visible=false); head.visible=false; nose.visible=false; MS.forEach(o=>{ o.mesh.visible=false; o.spr.visible=false; }); if(!ok) $('v3mu').textContent='';
     if(ok){
       bones.forEach(o=>{ const A=V(p,o.a),B=V(p,o.b); if(!A||!B) return; const d=B.clone().sub(A),L=d.length()||1e-4; o.m.visible=true; o.m.position.copy(A).addScaledVector(d,.5); o.m.scale.set(.022,L,.022); o.m.quaternion.setFromUnitVectors(Y,d.normalize()); });
       JT3.forEach((i,k)=>{ const A=V(p,i); if(A){ jm[k].visible=true; jm[k].position.copy(A); } });
@@ -2960,8 +3049,9 @@ function init3(){
       if(LH&&RH&&LS&&RS){ const lr=LH.clone().sub(RH).normalize(), up=LS.clone().add(RS).sub(LH).sub(RH).multiplyScalar(.5); up.addScaledVector(lr,-up.dot(lr)).normalize();
         body.quaternion.slerp(new TH.Quaternion().setFromRotationMatrix(new TH.Matrix4().makeBasis(lr,up,new TH.Vector3().crossVectors(lr,up))),.35); body.position.copy(LH).add(RH).multiplyScalar(.5); }
       if(head.visible){ const fr=new TH.Vector3(0,0,1).applyQuaternion(body.quaternion); nose.visible=true; nose.position.copy(head.position).addScaledVector(fr,.13); nose.quaternion.setFromUnitVectors(Y,fr); }
+      muUpd(p);
     }
-    R.render(sc,cam);
+    R.render(sc,cam); if(REC) recDraw();
     $('v3play').textContent=$('play').textContent; $('v3seek').value=$('seek').value; $('v3loop').checked=$('loopOn').checked;
     $('v3t').textContent=`프레임 ${$('fno').textContent} · ${video.currentTime.toFixed(2)}초`+(loopA!=null?` · 구간 ${loopA.toFixed(2)}`:'')+(loopB!=null?`~${loopB.toFixed(2)}초`:'')+' · 노란 코 = 몸이 향한 방향';
   }
@@ -2973,8 +3063,29 @@ function init3(){
   $('v3loop').onchange=e=>{ if(loopA==null||loopB==null){ e.target.checked=false; toast('먼저 A 시작·B 끝을 정해 주세요'); return; } $('loopOn').checked=e.target.checked; };
   $('v3seek').oninput=e=>{ $('seek').value=e.target.value; $('seek').dispatchEvent(new Event('input')); };
 }
-function close3(){ $('v3').hidden=true; }
+/* 3D 화면 녹화: 화면 공유 권한 없이 앱이 그린 3D 캔버스를 직접 녹화 */
+let REC=null;
+function recDraw(){ const {rc,ctx}=REC, cv=$('v3cv'); ctx.fillStyle='#0a0d11'; ctx.fillRect(0,0,rc.width,rc.height); ctx.drawImage(cv,0,0,rc.width,rc.height);
+  const fs=Math.max(13,Math.round(rc.width/40)), L=[$('v3t').textContent.split(' · 노란')[0],...$('v3mu').textContent.split('\n').filter(Boolean)], h=fs*1.45*L.length+fs*.6;
+  ctx.fillStyle='rgba(10,13,17,.78)'; ctx.fillRect(0,rc.height-h,rc.width,h); ctx.fillStyle='#ffd23f'; ctx.font=`bold ${fs}px system-ui,sans-serif`; ctx.textBaseline='top';
+  L.forEach((t,i)=>ctx.fillText(t,fs*.6,rc.height-h+fs*.4+i*fs*1.45,rc.width-fs*1.2)); }
+function recStart(){
+  const mime=pickMime(), rc=document.createElement('canvas'), cv=$('v3cv');
+  if(!mime||!rc.captureStream||!cv.width){ toast('이 브라우저는 녹화를 지원하지 않아요. 최신 크롬/사파리를 사용해 주세요.'); return; }
+  rc.width=cv.width&~1; rc.height=cv.height&~1;
+  const rec=new MediaRecorder(rc.captureStream(30),{mimeType:mime,videoBitsPerSecond:6e6}), ch=[];
+  rec.ondataavailable=e=>{ if(e.data&&e.data.size) ch.push(e.data); };
+  rec.onstop=()=>{ const ext=mime.includes('mp4')?'mp4':'webm', blob=new Blob(ch,{type:mime.split(';')[0]}); REC=null; $('v3rec').textContent='⏺ 3D 녹화';
+    if(!blob.size){ toast('녹화된 내용이 없어요'); return; }
+    askSave('녹화한 3D 영상을 저장할까요?',()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='3D동작.'+ext; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }); };
+  REC={rec,rc,ctx:rc.getContext('2d')}; rec.start(500); $('v3rec').textContent='⏹ 녹화 중지'; toast('녹화를 시작했어요');
+}
+$('v3rec').onclick=()=>{ if(REC) REC.rec.stop(); else recStart(); };
+function close3(){ if(REC) REC.rec.stop(); $('v3').hidden=true; }
 $('v3x').onclick=close3;
+$('v3mon').onclick=e=>{ MUon=!MUon; e.currentTarget.setAttribute('aria-pressed',MUon); };
+$('v3mt').onclick=()=>{ if(!$('v3i').hidden&&curI==='m'){ $('v3i').hidden=true; curI=null; return; } curI='m'; renderI(); };
+$('v3g').onclick=()=>{ if(!$('v3i').hidden&&curI==='g'){ $('v3i').hidden=true; curI=null; return; } curI='g'; renderI(); };
 $('v3d').onclick=async()=>{
   $('v3').hidden=false; $('v3m').textContent='3D 화면을 준비하는 중…';
   try{ await load3(); if(!G3) init3(); $('v3rate').value=$('rate').value; G3.start(); }catch(err){ $('v3m').textContent=err.message; }
