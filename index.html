@@ -507,7 +507,7 @@ body.busy #dock{pointer-events:none;opacity:.55}
 </div>
 <div id="help" hidden role="dialog" aria-label="단축키">
   <div class="card">
-    <h3>⌨ 단축키 <small style="font-weight:400;color:var(--sub);font-size:11px">· 버전 10-08 22시</small></h3>
+    <h3>⌨ 단축키 <small style="font-weight:400;color:var(--sub);font-size:11px">· 버전 10-08 23시</small></h3>
     <table>
       <tr><td><kbd>Space</kbd></td><td>재생 / 일시정지 (프리즈 중에는 계속 재생)</td></tr>
       <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>1프레임 이동 (<kbd>Shift</kbd> 누르면 10프레임)</td></tr>
@@ -1265,11 +1265,17 @@ function weightSplit(q){
 let KICKS=[];
 function kickGeom(l,W,H){ // 차는 다리 찾기 + 각도 (3D 좌표가 있으면 3D, 없으면 화면 기준)
   if(!l||[23,24,25,26,27,28].some(k=>!l[k])) return null;
-  const kk=l[27].y<l[28].y?0:1, sk=1-kk, KA=l[27+kk], SA=l[27+sk], SK=l[25+sk];
-  if(!(KA.y<SK.y)) return null; // 차는 발이 지지 다리 무릎보다 높이 올라왔을 때만 '발차기'
+  const kk=l[27].y<l[28].y?0:1, sk=1-kk, SK=l[25+sk];
+  if(!(l[27+kk].y<SK.y)) return null; // 차는 발이 지지 다리 무릎보다 높이 올라왔을 때만 '발차기'
+  const ok=k=>l[k]&&(l[k].visibility??1)>=.3, avg=(...ps)=>{ const o={x:0,y:0}; let w=0; ps.forEach(p=>{ o.x+=p.x;o.y+=p.y; if(p.wx!=null){o.wx=(o.wx||0)+p.wx;o.wy=(o.wy||0)+p.wy;o.wz=(o.wz||0)+p.wz;} w++; }); o.x/=w;o.y/=w; if(o.wx!=null){o.wx/=w;o.wy/=w;o.wz/=w;} return o; };
+  const ext=(A,B,t)=>{ const o={x:A.x+(A.x-B.x)*t,y:A.y+(A.y-B.y)*t}; if(A.wx!=null&&B.wx!=null){o.wx=A.wx+(A.wx-B.wx)*t;o.wy=A.wy+(A.wy-B.wy)*t;o.wz=A.wz+(A.wz-B.wz)*t;} return o; };
+  // 차는 발: 발끝(엄지발가락)까지 · 안 보이면 정강이 방향으로 발 길이만큼 늘려서
+  const KA=ok(31+kk)?l[31+kk]:ext(l[27+kk],l[25+kk],.3);
+  // 지지발: 바닥에 닿은 발(뒤꿈치~발끝 가운데)
+  const SA=ok(29+sk)&&ok(31+sk)?avg(l[29+sk],l[31+sk]):ok(29+sk)?l[29+sk]:l[27+sk];
   const hm={x:(l[23].x+l[24].x)/2,y:(l[23].y+l[24].y)/2}, v2=(a)=>({x:(a.x-hm.x)*W,y:(a.y-hm.y)*H});
   let ang;
-  const use3=$('angMode').value!=='2d'&&[23,24,27,28].every(k=>l[k].wx!=null);
+  const use3=$('angMode').value!=='2d'&&[23,24].every(k=>l[k].wx!=null)&&KA.wx!=null&&SA.wx!=null;
   if(use3){ const w=(a)=>({x:a.wx-(l[23].wx+l[24].wx)/2,y:a.wy-(l[23].wy+l[24].wy)/2,z:a.wz-(l[23].wz+l[24].wz)/2}), a=w(SA), b=w(KA);
     ang=Math.acos(Math.max(-1,Math.min(1,(a.x*b.x+a.y*b.y+a.z*b.z)/((Math.hypot(a.x,a.y,a.z)*Math.hypot(b.x,b.y,b.z))||1))))*DA; }
   else { const a=v2(SA), b=v2(KA); ang=Math.acos(Math.max(-1,Math.min(1,(a.x*b.x+a.y*b.y)/((Math.hypot(a.x,a.y)*Math.hypot(b.x,b.y))||1))))*DA; }
@@ -1814,21 +1820,30 @@ function torsoLen(l,W,H){ // 어깨 가운데~엉덩이 가운데 길이(픽셀)
 function partsOf(l){ const v=(k,t=.5)=>(l[k].visibility??1)>=t;
   return {head:[0,2,5,7,8].some(k=>v(k)), feet:[27,28,29,30,31,32].some(k=>v(k)), torso:torsoN(l)}; }
 function mergePeople(a){ // 같은 사람이 여러 조각(머리만·윗몸만·팔만·다리만)으로 잡힌 것을 한 사람으로 합치기
-  const W=video.videoWidth,H=video.videoHeight, ar=b=>Math.max(0,b.x1-b.x0)*Math.max(0,b.y1-b.y0), n=a.length;
+  const W=video.videoWidth,H=video.videoHeight, ar=b=>Math.max(0,b.x1-b.x0)*Math.max(0,b.y1-b.y0);
   const ov=(b,c)=>{ const x0=Math.max(b.x0,c.x0),x1=Math.min(b.x1,c.x1),y0=Math.max(b.y0,c.y0),y1=Math.min(b.y1,c.y1); return Math.max(0,x1-x0)*Math.max(0,y1-y0); };
   a.forEach(p=>{ const q=partsOf(p.lm); p.whole=q.head&&q.feet&&q.torso>=3&&p.cut<=1; });
-  // 전체 화면에서 온전히 잡힌 사람과 많이 겹치는 확대 조각 → 그 사람의 조각
-  a.forEach(p=>{ if(!p.tile) return; if(a.some(k=>!k.tile&&k.whole&&ar(p.box)>0&&ov(p.box,k.box)/ar(p.box)>.3)) p.whole=false; });
+  // 확대 검색은 전체 화면에서 못 찾은 '멀리 있는 사람'을 찾기 위한 것 → 이미 찾은 사람 몸 근처에 걸친 확대 결과는 버림
+  const full=a.filter(p=>!p.tile&&torsoN(p.lm)>=2);
+  a=a.filter(p=>!p.tile||!full.some(k=>{ const m=.2*k.S/W, mh=.2*k.S/H; return ov(p.box,{x0:k.box.x0-m,x1:k.box.x1+m,y0:k.box.y0-mh,y1:k.box.y1+mh})>0; }));
+  const n=a.length;
   const T_=(p,k)=>Math.max(torsoLen(p.lm,W,H),torsoLen(k.lm,W,H),.25*Math.max(p.S,k.S),12);
   const jd=(p,k,t)=>{ const ds=[]; CORE.forEach(j=>{ const u=p.lm[j],w=k.lm[j]; if((u.visibility??1)>=t&&(w.visibility??1)>=t) ds.push(Math.hypot((u.x-w.x)*W,(u.y-w.y)*H)); }); ds.sort((x,y)=>x-y); return ds.length?{n:ds.length,md:ds[ds.length>>1]}:{n:0,md:0}; };
+  const headOf=p=>{ const ks=[0,2,5,7,8].filter(k=>(p.lm[k].visibility??1)>=.6); if(!ks.length) return null; return {x:ks.reduce((s,k)=>s+p.lm[k].x,0)/ks.length*W,y:ks.reduce((s,k)=>s+p.lm[k].y,0)/ks.length*H}; };
+  const inBox=(p,k,e)=>{ const c=k.box, m=e*k.S, x=((p.box.x0+p.box.x1)/2)*W, y=((p.box.y0+p.box.y1)/2)*H; return x>=c.x0*W-m&&x<=c.x1*W+m&&y>=c.y0*H-m&&y<=c.y1*H+m; };
   const same=(p,k)=>{
     const T=T_(p,k), b=p.box,c=k.box, m=Math.min(ar(b),ar(c)), r=m>0?ov(b,c)/m:0;
+    // 작은 조각이 큰 사람 몸(팔 뻗은 범위 포함) 안에 있으면 그 사람 것
+    const [sm,bg]=p.S<k.S?[p,k]:[k,p]; if(sm.S<.5*bg.S&&inBox(sm,bg,.2)) return true;
     if(p.whole&&k.whole){ // 둘 다 온전한 사람: 관절 위치가 거의 같아야 중복
       const J=jd(p,k,.5); if(J.n>=4) return J.md<.45*T; if(J.n>=2){ if(J.md<.45*T) return true; if(J.md>.9*T) return false; }
       return r>.65||Math.hypot((p.cx-k.cx)*W,(p.cy-k.cy)*H)<.3*Math.max(p.S,k.S); }
-    // 하나라도 조각: 확실히 보이는 관절이 많이 어긋나면 다른 사람, 아니면 겹치거나 위아래로 이어져 있으면 같은 사람
-    const J=jd(p,k,.75); if(J.n>=3&&J.md>1.2*T&&r<.5) return false;
-    if(r>.2) return true;
+    // 하나라도 조각: 사람은 머리가 하나 → 머리가 둘 다 보이면 머리 위치로 판단
+    if(r>.3) return true;
+    const hp=headOf(p),hk=headOf(k);
+    if(hp&&hk&&!(p.whole&&k.whole)) return Math.hypot(hp.x-hk.x,hp.y-hk.y)<.7*T;
+    if(r>.15) return true;
+    if(inBox(p,k,.05)||inBox(k,p,.05)) return true;
     const hx=Math.min(b.x1,c.x1)-Math.max(b.x0,c.x0), nw=Math.min(b.x1-b.x0,c.x1-c.x0);
     const gy=Math.max(0,Math.max(b.y0,c.y0)-Math.min(b.y1,c.y1))*H;
     return nw>0&&hx>=.4*nw&&gy<.6*T; };
@@ -1843,7 +1858,7 @@ function mergePeople(a){ // 같은 사람이 여러 조각(머리만·윗몸만�
   return Object.values(G).map(g=>{
     if(g.length===1) return g[0];
     g.sort((p,q)=>(q.whole-p.whole)||(p.tile-q.tile)||(p.cut-q.cut)||(torsoN(q.lm)-torsoN(p.lm))||(q.q-p.q)||(q.S-p.S));
-    const lm=g[0].lm.map((_,j)=>{ let b=null,bv=-1; g.forEach((p,r)=>{ const v=(p.lm[j].visibility??1)-(r?.15:0); if(v>bv){bv=v;b=p.lm[j]} }); return {...b}; });
+    const lm=g[0].lm.map((u,j)=>{ if((u.visibility??1)>=.4) return {...u}; let b=u,bv=u.visibility??0; g.forEach((p,r)=>{ if(!r) return; const v=(p.lm[j].visibility??1); if(v>=.6&&v>bv+.2){bv=v;b=p.lm[j]} }); return {...b}; });
     return {lm,...descOf(lm,W,H),q:qualOf(lm),cut:0,tile:g.every(p=>p.tile),whole:true};
   });
 }
@@ -1928,7 +1943,7 @@ function pickUI(snap,ps){
     $('pickAll').onclick=()=>{ if(sel.size===ps.length) sel.clear(); else ps.forEach(p=>sel.add(p.id)); draw(); };
     $('pickGo').onclick=()=>done([...sel]);
     $('pickCancel').onclick=()=>done(null);
-    $('pickTxt').innerHTML=`🧑‍🤝‍🧑 화면에 <b>${ps.length}명</b>이 보여요. 분석할 사람을 눌러 고르세요<br><span class="sub">한 명만도, 여러 명도 고를 수 있어요 · 버전 10-08 22시</span>`;
+    $('pickTxt').innerHTML=`🧑‍🤝‍🧑 화면에 <b>${ps.length}명</b>이 보여요. 분석할 사람을 눌러 고르세요<br><span class="sub">한 명만도, 여러 명도 고를 수 있어요 · 버전 10-08 23시</span>`;
     box.hidden=false; fit(); window.addEventListener('resize',fit); draw();
   });
 }
