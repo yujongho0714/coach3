@@ -149,7 +149,7 @@ body.drop::after{content:'🎞 영상을 여기에 놓으세요';position:fixed;
 #dock.open .dockTg{background:var(--panel);color:#fff;border:1px solid var(--line)}
 #dockStrip{display:flex;align-items:center;gap:6px;overflow-x:auto;overflow-y:hidden;max-width:0;opacity:0;padding:6px 0;background:rgba(14,18,24,.92);border:1px solid transparent;border-radius:28px;scrollbar-width:none;touch-action:pan-x;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);transition:max-width .45s cubic-bezier(.2,.8,.2,1),opacity .2s,padding .3s,border-color .3s}
 #dockStrip::-webkit-scrollbar{display:none}
-#dock.open #dockStrip{max-width:calc(100vw - 80px);opacity:1;padding:6px 10px;border-color:var(--line)}
+#dock.open #dockStrip{max-width:var(--dmw,calc(100vw - 80px));opacity:1;padding:6px 10px;border-color:var(--line)}
 #tools{display:contents}
 #dockStrip button,#dockStrip select,#dockStrip input,#dockStrip .dsep{flex:none;opacity:0;transform:translateX(-22px);transition:opacity .22s,transform .34s cubic-bezier(.2,.9,.3,1.25),background .12s;transition-delay:calc(var(--i,0)*26ms)}
 #dock.open #dockStrip button,#dock.open #dockStrip select,#dock.open #dockStrip input,#dock.open #dockStrip .dsep{opacity:1;transform:none}
@@ -157,6 +157,12 @@ body.drop::after{content:'🎞 영상을 여기에 놓으세요';position:fixed;
 #dockStrip button{padding:7px 11px;border-radius:20px;white-space:nowrap;font-size:13px}
 #dockStrip select{padding:7px 8px;border-radius:20px;font-size:13px}
 #dockStrip .dsep{width:1px;height:24px;background:var(--line)}
+/* 편집 버튼을 화면 오른쪽에 두면 메뉴가 왼쪽으로 펼쳐져요 (버튼 가까이부터 이동·펜…) */
+#dock.rev{flex-direction:row-reverse}
+#dock.rev #dockStrip{flex-direction:row-reverse}
+#dock.rev:not(.open) #dockStrip button,#dock.rev:not(.open) #dockStrip select,#dock.rev:not(.open) #dockStrip input,#dock.rev:not(.open) #dockStrip .dsep{transform:translateX(22px)}
+.dockTg{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.dockTg.drag{transform:scale(1.18);box-shadow:0 0 0 4px rgba(255,210,63,.45),0 8px 22px rgba(0,0,0,.6)!important;cursor:grabbing}
 #zPct{font-variant-numeric:tabular-nums}
 body.busy #dock{pointer-events:none;opacity:.55}
 #fsBar{display:none;position:absolute;left:0;right:0;bottom:0;z-index:55;box-sizing:border-box;height:var(--fsh);padding:16px 10px calc(6px + env(safe-area-inset-bottom,0px));background:linear-gradient(180deg,rgba(10,13,17,0),rgba(10,13,17,.94) 24%);color:#fff;touch-action:manipulation}
@@ -3860,7 +3866,44 @@ function openDock(on){
   $('dock').classList.toggle('open',on); $('dockTg').textContent=on?'✕':'✏️'; $('dockTg').setAttribute('aria-expanded',on);
   if(on){ if(tool==='pan') setTool(lastTool); } else if(tool!=='pan') setTool('pan');
 }
-$('dockTg').onclick=()=>openDock(!$('dock').classList.contains('open'));
+$('dockTg').onclick=()=>{ if(DK.just) return; openDock(!$('dock').classList.contains('open')); };
+/* 편집 버튼 옮기기: 꾹 누르면(0.4초) 들려서 원하는 곳으로 끌어 놓을 수 있어요. 위치는 이 기기에 기억돼요 */
+const DK={press:null,drag:false,just:false,pos:null}, DKKEY='coachPro.dockPos', DKS=46;
+function placeDock(x,y,save){
+  const d=$('dock'), W=window.innerWidth, H=window.innerHeight;
+  x=Math.max(6,Math.min(W-DKS-6,x)); y=Math.max(6,Math.min(H-DKS-6,y)); DK.pos={x,y};
+  const right=x+DKS/2>W/2; d.classList.toggle('rev',right); // 화면 오른쪽이면 메뉴를 왼쪽으로
+  if(right){ d.style.left='auto'; d.style.right=(W-x-DKS)+'px'; } else { d.style.right='auto'; d.style.left=x+'px'; }
+  d.style.top=(y+DKS/2)+'px'; d.style.transform='translateY(-50%)'; // 버튼 가운데 높이에 메뉴 줄을 맞춰요
+  d.style.maxWidth=(W-12)+'px'; d.style.setProperty('--dmw',Math.max(90,(right?x:W-x-DKS)-20)+'px'); // 남은 폭만큼만 펼쳐서 잘리지 않게 (넘치면 옆으로 밀어 보기)
+  if(save){ try{ localStorage.setItem(DKKEY,JSON.stringify({fx:x/W,fy:y/H})); }catch(e){} }
+}
+function loadDockPos(){ try{ const o=JSON.parse(localStorage.getItem(DKKEY)||'null'); if(o) placeDock(o.fx*window.innerWidth,o.fy*window.innerHeight,false); }catch(e){} }
+window.addEventListener('resize',loadDockPos);
+{ const tg=$('dockTg'), dk=$('dock');
+  const startDrag=()=>{ if(!DK.press||DK.drag) return; DK.drag=true; tg.classList.add('drag'); try{ navigator.vibrate&&navigator.vibrate(25); }catch(_){} };
+  const endDrag=()=>{ DK.drag=false; tg.classList.remove('drag'); if(DK.pos) placeDock(DK.pos.x,DK.pos.y,true); DK.just=true; setTimeout(()=>DK.just=false,400); };
+  // 폰: 터치를 직접 처리해요 → 길게 누를 때 브라우저 메뉴(오른쪽 버튼 메뉴)·글자 선택이 뜨지 않아요
+  dk.addEventListener('contextmenu',e=>{ if(e.target.closest('.dockTg')) e.preventDefault(); });
+  tg.addEventListener('touchstart',e=>{ if(e.touches.length>1) return; e.preventDefault(); const t=e.touches[0], r=tg.getBoundingClientRect();
+    clearTimeout(DK.press&&DK.press.t);
+    DK.press={x:t.clientX,y:t.clientY,ox:t.clientX-r.left,oy:t.clientY-r.top,t0:performance.now(),moved:false,t:setTimeout(startDrag,350)}; },{passive:false});
+  tg.addEventListener('touchmove',e=>{ const P=DK.press; if(!P) return; e.preventDefault(); const t=e.touches[0];
+    if(!DK.drag&&Math.hypot(t.clientX-P.x,t.clientY-P.y)>12){ P.moved=true; startDrag(); } // 누른 채 바로 끌어도 옮겨져요
+    if(DK.drag) placeDock(t.clientX-P.ox,t.clientY-P.oy,false); },{passive:false});
+  tg.addEventListener('touchend',e=>{ const P=DK.press; if(!P) return; e.preventDefault(); clearTimeout(P.t); DK.press=null;
+    if(DK.drag) endDrag(); else if(performance.now()-P.t0<600) openDock(!dk.classList.contains('open')); },{passive:false}); // 짧게 누르면 메뉴 열기/닫기
+  tg.addEventListener('touchcancel',()=>{ const P=DK.press; if(!P) return; clearTimeout(P.t); DK.press=null; if(DK.drag) endDrag(); });
+  // 컴퓨터(마우스): 꾹 누른 채 끌기
+  tg.addEventListener('pointerdown',e=>{ if(e.pointerType!=='mouse') return; const r=tg.getBoundingClientRect();
+    DK.press={id:e.pointerId,x:e.clientX,y:e.clientY,ox:e.clientX-r.left,oy:e.clientY-r.top,t:setTimeout(startDrag,350)};
+    try{ tg.setPointerCapture(e.pointerId); }catch(_){} });
+  tg.addEventListener('pointermove',e=>{ const P=DK.press; if(e.pointerType!=='mouse'||!P||P.id!==e.pointerId) return;
+    if(!DK.drag&&Math.hypot(e.clientX-P.x,e.clientY-P.y)>12) startDrag();
+    if(DK.drag){ e.preventDefault(); placeDock(e.clientX-P.ox,e.clientY-P.oy,false); } });
+  const up=e=>{ if(e.pointerType!=='mouse') return; const P=DK.press; if(!P) return; clearTimeout(P.t); DK.press=null; if(DK.drag) endDrag(); };
+  tg.addEventListener('pointerup',up); tg.addEventListener('pointercancel',up);
+  loadDockPos(); }
 [...$('dockStrip').querySelectorAll('button,select,input,.dsep')].forEach((el,i)=>el.style.setProperty('--i',i));
 
 /* ---------- 영상 확대·이동 (그리는 중에도 가능) ---------- */
