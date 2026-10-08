@@ -171,6 +171,26 @@ body.busy #dock{pointer-events:none;opacity:.55}
 #fsListBox #fzList{display:flex;flex-wrap:nowrap;gap:6px;width:max-content;min-height:40px;align-items:center;margin:0}
 #fsListBox .grp{width:auto;flex:none;flex-wrap:nowrap;border:1px solid var(--line);border-radius:12px;padding:3px 8px;background:rgba(20,26,34,.78)}
 #fsListBox .sub{white-space:nowrap}
+/* ===== 인체 모형·근육 ===== */
+#v3mu{height:84px;min-height:84px;overflow-y:auto;font-size:12px;line-height:1.55;white-space:pre-line;margin-top:4px;color:var(--text);overscroll-behavior:contain}
+#v3t{height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#v3i{max-height:46%}
+#v3i button.mchip,button.mchip{float:none;margin:3px 4px 0 0;padding:4px 9px;font-size:12px}
+.muD b{display:block;margin-top:6px;font-size:14px}
+.muD>b:first-child{margin-top:0}
+.muD .tm{border-top:1px solid #2c3643;margin-top:8px;padding-top:6px;font-size:13px;line-height:1.65}
+#muNow{white-space:pre-line;min-height:3.6em;font-size:12px;line-height:1.6;margin:6px 0;color:var(--text)}
+#muInfo{min-height:120px;border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin:4px 0;background:#12171e;font-size:13px;line-height:1.6}
+#v3i details.tm summary{cursor:pointer;font-weight:700}
+.exr{margin:6px 0;padding:7px 9px;background:#12171e;border:1px solid #2c3643;border-radius:10px}
+.exn{font-weight:700;font-size:13px}
+.kd{display:inline-block;font-size:11px;font-weight:800;padding:1px 7px;border-radius:9px;color:#111}
+.kd.kd힘{background:#ff9f43}.kd.kd속도{background:#3ec6ff}.kd.kd파워{background:#ffd23f}
+.exr a{display:inline-block;margin:5px 6px 0 0;padding:5px 10px;border-radius:14px;font-size:12px;font-weight:700;text-decoration:none;color:#fff;float:none}
+.exr a.yt{background:#c4302b}.exr a.gg{background:#2f6fe4}.exr a.ig{background:linear-gradient(45deg,#f09433,#dc2743,#bc1888)}
+.chip.muP{background:#3a3000;border-color:#ffd23f;color:#ffd23f;font-weight:700}
+.chip.muS{background:#0f2e1f;border-color:#38c486;color:#7be0b0}
+#v3mu .chip{margin:2px 3px 2px 0;padding:6px 10px;font-size:12px}
 </style>
 </head>
 <body>
@@ -186,6 +206,7 @@ body.busy #dock{pointer-events:none;opacity:.55}
   <label class="btn">🎞 영상 불러오기<input id="file" type="file" accept="video/*" hidden></label>
   <button id="poseBtn">🦴 관절 표시</button>
   <button id="skelBtn">💀 해골 모형</button>
+  <button id="bodyBtn">🫀 인체·근육 모드</button>
   <button id="shot">📷 이미지 저장</button>
   <button id="save2">🎬 피드백영상 저장하기</button>
   <span id="status"></span>
@@ -240,6 +261,7 @@ body.busy #dock{pointer-events:none;opacity:.55}
         <button data-tool="text">T 글자</button>
         <button data-tool="erase">🧽 지우개</button>
         <button data-tool="joint">🦴 관절 수정</button>
+        <button data-tool="muscle">💪 근육</button>
       </div>
       <span class="dsep"></span>
       <input id="color" type="color" value="#ffd23f" title="색">
@@ -266,6 +288,13 @@ body.busy #dock{pointer-events:none;opacity:.55}
     </div>
     <div id="fsListBox"></div>
   </div>
+</div>
+<div id="muPanel" class="sec" hidden>
+  <div class="secT">🫀 인체·근육 모드</div>
+  <div class="sub">🟡 주동근 · 🟢 보조근 · 🔴 그 외 근육 (영상 동작으로 추정한 값이에요)</div>
+  <div id="muNow"></div>
+  <div id="muInfo"></div>
+  <div id="muChips"></div>
 </div>
 <video id="tv" playsinline muted preload="auto"></video>
 
@@ -523,6 +552,7 @@ const HINTS={
   angle:'3곳을 차례로 누르세요: ①한쪽 끝 ②꼭짓점(각도가 재질 곳) ③다른 쪽 끝',
   text:'글자를 넣을 곳을 누르세요.',
   erase:'🧽 지울 그림을 누르거나 손가락으로 문지르세요. (실수하면 ↩ 되돌리기)',
+  muscle:'💪 몸 위 근육을 눌러 보세요. 누르면 그 근육이 확대되고 이름·하는 일이 아래에 나와요. (빈 곳을 누르면 원래대로)',
   joint:'🦴 영상을 멈추고, 잘못된 관절 점을 끌어서 맞는 자리로 옮기세요. 앞뒤 장면도 자동으로 따라 고쳐져요. (정밀 분석 후 사용)'
 };
 
@@ -612,6 +642,7 @@ $('poseBtn').onclick=()=>{
 function setTool(t){
   tool=t; if(t!=='pan') lastTool=t; angPts=[]; draft=null;
   if(t==='joint'&&!poseOn){ poseOn=true; $('poseBtn').classList.add('on'); }
+  if(t==='muscle'&&!bodyOn) setBody(true);
   document.querySelectorAll('#tools button').forEach(b=>b.classList.toggle('on',b.dataset.tool===t));
   $('hint').textContent=HINTS[t]||''; render();
 }
@@ -639,6 +670,7 @@ const base=()=>({id:++annId,color:$('color').value,w:Math.max(.8,+(parseFloat($(
 
 cv.addEventListener('pointerdown',e=>{
   if(!video.src||tool==='pan') return;
+  if(tool==='muscle'){ pickMuscle2D(e); return; }
   fz=null; video.pause();
   cv.setPointerCapture(e.pointerId);
   if(tool==='erase'){ erasing=true; eraseAt(pt(e,true)); return; }
@@ -1376,7 +1408,7 @@ function drawPip(){
 
 function paintOverlays(){
   if(track) pose=poseAt(track,vtime());
-  drawSkelDim(); drawTrails(); drawGhost(); drawSkeleton(); drawPose(); drawForce(); drawGRF(); drawShift(); drawWeight(); drawCoachMark(); ctx.save(); hud(); drawPip(); drawScore(); ctx.restore();
+  drawSkelDim(); drawTrails(); drawGhost(); drawSkeleton(); drawBodyMuscles(); drawPose(); drawForce(); drawGRF(); drawShift(); drawWeight(); drawCoachMark(); ctx.save(); hud(); drawPip(); drawScore(); ctx.restore();
   anns.filter(a=>vis(a)).forEach(drawAnn);
 }
 function render(){
@@ -2916,7 +2948,242 @@ $('cfmY').onclick=()=>{ $('cfm').hidden=true; const f=cfmFn; cfmFn=null; if(f) f
 $('cfmN').onclick=()=>{ $('cfm').hidden=true; cfmFn=null; };
 $('shot').onclick=()=>{ if(!video.videoWidth){ toast('먼저 영상을 불러오세요'); return; } askSave('현재 화면을 이미지로 저장할까요?',shotNow); };
 $('save2').onclick=()=>{ if(!video.src){ toast('먼저 영상을 불러오세요'); return; } askSave('피드백 영상을 저장할까요?\n(영상 길이만큼 시간이 걸려요)',()=>$('save').click()); };
-/* ---------- 3D 동작 보기 (분석한 관절 움직임을 입체로) ---------- */
+/* ---------- 인체 모형 · 근육 (3D 보기와 2D 인체 모드가 같이 씀) ---------- */
+const VM={sub:(a,b)=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z}),add:(a,b)=>({x:a.x+b.x,y:a.y+b.y,z:a.z+b.z}),mul:(a,s)=>({x:a.x*s,y:a.y*s,z:a.z*s}),dot:(a,b)=>a.x*b.x+a.y*b.y+a.z*b.z,len:a=>Math.hypot(a.x,a.y,a.z),
+  nrm:a=>{const l=Math.hypot(a.x,a.y,a.z)||1;return {x:a.x/l,y:a.y/l,z:a.z/l}},cross:(a,b)=>({x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x})};
+const DA=180/Math.PI, dfa=(x,y)=>{let e=x-y;while(e>180)e-=360;while(e<-180)e+=360;return e};
+const HZC={};
+let MSEL=null, bodyOn=false, LASTACT=null, zByMu=false, G3=null, curI=null, MUon=true;
+const MU2D={items:[]};
+function sceneOf(p){ // 영상 속 2D 관절 위치(미터) + AI가 추정한 깊이
+  if(!p||!p[11]||!p[12]||!p[23]||!p[24]||p[23].x==null) return null;
+  const VW=video.videoWidth||1, VH=video.videoHeight||1, X0=(p[23].x+p[24].x)/2*VW, Y0=(p[23].y+p[24].y)/2*VH;
+  const hc=(parseFloat($('hcm').value)||140)/100; let SC=mpp||0;
+  if(!SC){ const tl=Math.hypot(((p[11].x+p[12].x)-(p[23].x+p[24].x))/2*VW,((p[11].y+p[12].y)-(p[23].y+p[24].y))/2*VH); SC=tl?hc*.29/tl:0; }
+  if(!SC) return null;
+  const ZS=hc/1.7;
+  const V=i=>{ const q=p[i]; if(!q||q.x==null) return null; let z;
+    if(q.wz!=null&&(q.visibility??1)>.35){ z=-q.wz*ZS; HZC[i]=z; } else z=HZC[i]??0;
+    return {x:(q.x*VW-X0)*SC,y:-(q.y*VH-Y0)*SC,z}; };
+  return {V,SC,VW,VH,X0,Y0};
+}
+function bodyFrame(S){
+  const V=S.V, LH=V(23),RH=V(24),LS=V(11),RS=V(12); if(!(LH&&RH&&LS&&RS)) return null;
+  const lr=VM.nrm(VM.sub(LH,RH)); let up=VM.mul(VM.sub(VM.add(LS,RS),VM.add(LH,RH)),.5); up=VM.nrm(VM.sub(up,VM.mul(lr,VM.dot(up,lr))));
+  return {lr,up,fr:VM.cross(lr,up)};
+}
+/* 근육 데이터: seg(붙는 뼈대) a~b(구간) d(바깥 방향 f앞 b뒤 o바깥 i안) off(뼈에서 떨어진 정도) r(굵기) */
+const MU=[
+ {id:'delt',n:'삼각근',g:'어깨·팔',seg:'ua',a:-.02,b:.5,d:{o:1,f:.15},off:.035,r:.05,pos:'어깨를 둥글게 덮은 근육 (기시: 쇄골·견봉·견갑극 / 정지: 위팔뼈 바깥)',act:'팔을 앞·옆·뒤로 들어 올려요',tip:'지르기에서 팔을 앞으로 뻗고, 막기에서 팔을 들어 올릴 때 써요.'},
+ {id:'pec',n:'대흉근',g:'몸통(앞)',seg:'k',a:.78,b:.78,d:{f:1,o:.7},off:.12,r:.055,along:'lat',hl:.1,pos:'가슴 앞쪽 부채꼴 근육 (기시: 쇄골·가슴뼈·갈비연골 / 정지: 위팔뼈 위쪽)',act:'팔을 앞으로 모으고 안쪽으로 돌려요',tip:'지르기 마지막에 팔을 앞으로 밀어낼 때 크게 써요.'},
+ {id:'bic',n:'상완이두근',g:'어깨·팔',seg:'ua',a:.15,b:.92,d:{f:1},off:.032,r:.03,pos:'위팔 앞쪽 (기시: 견갑골 / 정지: 아래팔 노뼈 위쪽)',act:'팔꿈치를 굽히고 손바닥을 위로 돌려요',tip:'주먹을 허리로 당길 때, 팔을 접어 막을 때 써요.'},
+ {id:'tri',n:'상완삼두근',g:'어깨·팔',seg:'ua',a:.1,b:.92,d:{b:1},off:.032,r:.034,pos:'위팔 뒤쪽 (기시: 견갑골·위팔뼈 뒤 / 정지: 팔꿈치 뼈 끝)',act:'팔꿈치를 펴요',tip:'지르기에서 팔을 쭉 펴 주먹을 내미는 주인공이에요.'},
+ {id:'fflx',n:'전완굴근',g:'어깨·팔',seg:'fa',a:.05,b:.75,d:{f:1,i:.3},off:.026,r:.024,pos:'아래팔 안쪽·앞쪽 (기시: 위팔뼈 안쪽 / 정지: 손목·손가락뼈)',act:'손목과 손가락을 굽혀 주먹을 쥐어요',tip:'주먹을 꽉 쥐고 손목을 고정할 때 써요.'},
+ {id:'fext',n:'전완신근',g:'어깨·팔',seg:'fa',a:.05,b:.75,d:{b:1,o:.3},off:.026,r:.022,pos:'아래팔 바깥·뒤쪽 (기시: 위팔뼈 바깥 / 정지: 손등·손가락뼈)',act:'손목과 손가락을 펴요',tip:'지르기 순간 손목이 꺾이지 않게 잡아 줘요.'},
+ {id:'trap',n:'승모근',g:'몸통(뒤)',seg:'k',a:.95,b:.95,d:{b:1,o:.3},off:.06,r:.045,along:'lat',hl:.12,pos:'목에서 등 위쪽까지 걸친 마름모 근육 (기시: 뒤통수·목뼈·등뼈 / 정지: 쇄골·어깨뼈)',act:'어깨를 으쓱 올리고 어깨뼈를 모아요',tip:'어깨가 올라가지 않게 눌러 주고, 팔을 당길 때 써요.'},
+ {id:'lat',n:'광배근',g:'몸통(뒤)',seg:'k',a:.2,b:.78,d:{b:1,o:.6},off:.09,r:.075,pos:'등 옆에서 아래로 넓게 퍼진 근육 (기시: 허리뼈·골반 / 정지: 위팔뼈 앞쪽)',act:'팔을 몸 쪽으로 당기고 뒤로 보내요',tip:'지르는 반대 주먹을 허리로 당기는 힘이 여기서 나와요.'},
+ {id:'rect',n:'복직근',g:'몸통(앞)',seg:'k',a:.06,b:.62,d:{f:1,o:.22},off:.075,r:.035,pos:'배 앞 가운데 세로 근육 (기시: 치골 / 정지: 가슴뼈·갈비연골)',act:'상체를 숙이고 배를 단단히 잡아요',tip:'차기와 지르기 끝에서 몸통을 단단히 잡아 힘이 새지 않게 해요.'},
+ {id:'obl',n:'복사근',g:'몸통(앞)',seg:'k',a:.1,b:.62,d:{o:1,f:.4},off:.1,r:.05,pos:'옆구리를 비스듬히 감싼 근육 (기시: 아래 갈비뼈 / 정지: 골반·복부 중앙선)',act:'몸통을 돌리고 옆으로 굽혀요',tip:'돌려차기·지르기의 허리 회전 엔진이에요.'},
+ {id:'erec',n:'척추기립근',g:'몸통(뒤)',seg:'k',a:0,b:.95,d:{b:1,o:.2},off:.08,r:.03,pos:'척추 양옆을 따라 세로로 달리는 근육 (기시: 엉치뼈·골반 / 정지: 갈비뼈·두개골)',act:'허리를 펴고 상체를 세워요',tip:'상체가 앞으로 숙지 않게 곧게 세워 줘요.'},
+ {id:'psoas',n:'엉덩허리근',g:'엉덩이·허벅지',seg:'t',a:0,b:.3,d:{f:1},off:.035,r:.032,pos:'골반 안쪽 깊은 곳 (기시: 허리뼈·골반 안쪽 / 정지: 넙다리뼈 안쪽 위) ※ 몸속 깊어 그림은 추정 위치예요',act:'허벅지를 앞으로 끌어올려요',tip:'앞차기에서 무릎을 끌어올릴 때 써요.'},
+ {id:'gmax',n:'대둔근',g:'엉덩이·허벅지',seg:'t',a:-.05,b:.3,d:{b:1,o:.3},off:.07,r:.06,pos:'엉덩이에서 가장 큰 근육 (기시: 엉치뼈·골반 뒤 / 정지: 넙다리뼈 뒤·바깥)',act:'엉덩관절을 펴고 다리를 뒤로 밀어요',tip:'뒷발로 땅을 밀어 몸을 앞으로 보내는 엔진이에요.'},
+ {id:'gmed',n:'중둔근',g:'엉덩이·허벅지',seg:'t',a:-.15,b:.18,d:{o:1,b:.3},off:.065,r:.045,pos:'엉덩이 옆쪽 (기시: 골반 바깥 / 정지: 넙다리뼈 큰 돌기)',act:'다리를 옆으로 벌리고 골반 균형을 잡아요',tip:'한 발 서기·옆차기에서 골반이 기울지 않게 잡아요.'},
+ {id:'rf',n:'대퇴직근',g:'엉덩이·허벅지',seg:'t',a:.05,b:.95,d:{f:1},off:.04,r:.03,pos:'허벅지 앞 가운데 (기시: 골반 앞 / 정지: 무릎뼈 힘줄)',act:'무릎을 펴고 엉덩관절을 굽혀요',tip:'앞차기에서 무릎을 올리고 펴는 두 가지 일을 해요.'},
+ {id:'vl',n:'외측광근',g:'엉덩이·허벅지',seg:'t',a:.25,b:.95,d:{o:1,f:.5},off:.045,r:.04,pos:'허벅지 바깥쪽 (기시: 넙다리뼈 바깥 / 정지: 무릎뼈 힘줄)',act:'무릎을 펴요',tip:'기마서기·앞굽이에서 몸을 버티는 힘이에요.'},
+ {id:'vm',n:'내측광근',g:'엉덩이·허벅지',seg:'t',a:.5,b:.97,d:{i:1,f:.5},off:.04,r:.034,pos:'무릎 위 안쪽의 물방울 모양 (기시: 넙다리뼈 안쪽 / 정지: 무릎뼈 힘줄)',act:'무릎을 끝까지 펴고 무릎뼈를 잡아요',tip:'서기에서 무릎이 안으로 무너지지 않게 도와요.'},
+ {id:'tfl',n:'대퇴근막장근',g:'엉덩이·허벅지',seg:'t',a:0,b:.35,d:{o:1,f:.4},off:.05,r:.025,pos:'엉덩이 앞옆 (기시: 골반 앞 / 정지: 허벅지 바깥 띠)',act:'다리를 앞·옆으로 들어요',tip:'옆차기·앞차기에서 다리를 들어 올릴 때 도와요.'},
+ {id:'sart',n:'봉공근',g:'엉덩이·허벅지',seg:'t',a:0,b:.8,d:{f:1,i:.6},off:.045,r:.018,pos:'허벅지 앞을 비스듬히 가로지르는 가장 긴 근육 (기시: 골반 앞 / 정지: 정강이뼈 안쪽 위)',act:'다리를 굽혀 바깥으로 돌려요',tip:'돌려차기에서 다리를 접어 돌릴 때 도와요.'},
+ {id:'add',n:'내전근',g:'엉덩이·허벅지',seg:'t',a:.05,b:.7,d:{i:1},off:.05,r:.035,pos:'허벅지 안쪽 (기시: 치골 / 정지: 넙다리뼈 뒤)',act:'다리를 몸 쪽으로 모아요',tip:'벌린 다리를 모으고 서기를 안정시켜요.'},
+ {id:'bf',n:'대퇴이두근',g:'엉덩이·허벅지',seg:'t',a:.1,b:.95,d:{b:1,o:.5},off:.05,r:.033,pos:'허벅지 뒤 바깥쪽 햄스트링 (기시: 앉은뼈·넙다리뼈 / 정지: 종아리뼈 위)',act:'무릎을 굽히고 엉덩관절을 펴요',tip:'돌려차기에서 다리를 접어 올리고 땅을 밀 때 써요.'},
+ {id:'sm',n:'반건·반막양근',g:'엉덩이·허벅지',seg:'t',a:.1,b:.95,d:{b:1,i:.5},off:.05,r:.033,pos:'허벅지 뒤 안쪽 햄스트링 (기시: 앉은뼈 / 정지: 정강이뼈 안쪽 위)',act:'무릎을 굽히고 엉덩관절을 펴요',tip:'뒷다리로 밀어내고 무릎을 접을 때 같이 일해요.'},
+ {id:'gas',n:'비복근',g:'종아리·발',seg:'s',a:0,b:.6,d:{b:1},off:.045,r:.035,pos:'종아리 뒤쪽 불룩한 근육 (기시: 넙다리뼈 아래 / 정지: 아킬레스건)',act:'발끝으로 서고 무릎을 굽혀요',tip:'발끝으로 땅을 차고 스텝·점프할 때 써요.'},
+ {id:'sol',n:'가자미근',g:'종아리·발',seg:'s',a:.3,b:.85,d:{b:1},off:.035,r:.028,pos:'비복근 아래 깊은 곳 (기시: 종아리뼈·정강이뼈 위 / 정지: 아킬레스건)',act:'발목을 아래로 눌러 발끝으로 밀어요',tip:'서 있는 동안 계속 일하며 균형을 잡아요.'},
+ {id:'tib',n:'전경골근',g:'종아리·발',seg:'s',a:.08,b:.85,d:{f:1,o:.3},off:.035,r:.02,pos:'정강이 앞쪽 (기시: 정강이뼈 바깥 위 / 정지: 발 안쪽 뼈)',act:'발끝을 들어 올려요',tip:'차기에서 발끝을 당기고 착지할 때 발을 들어 줘요.'}];
+const RULES=[
+ {id:'shFlex',label:'어깨관절 굴곡(팔 앞으로)',P:['delt','pec'],S:['bic']},
+ {id:'shExt',label:'어깨관절 신전(팔 뒤로)',P:['lat','tri'],S:['delt']},
+ {id:'shAbd',label:'어깨관절 외전(팔 옆으로)',P:['delt','trap'],S:[]},
+ {id:'shAdd',label:'어깨관절 내전(팔 모으기)',P:['pec','lat'],S:[]},
+ {id:'elFlex',label:'팔꿈치 굴곡',P:['bic'],S:['fflx']},
+ {id:'elExt',label:'팔꿈치 신전',P:['tri'],S:['fext']},
+ {id:'hipFlex',label:'엉덩관절 굴곡',P:['psoas','rf'],S:['tfl','sart']},
+ {id:'hipExt',label:'엉덩관절 신전',P:['gmax','bf','sm'],S:['add']},
+ {id:'hipAbd',label:'엉덩관절 외전',P:['gmed','tfl'],S:['gmax']},
+ {id:'hipAdd',label:'엉덩관절 내전',P:['add'],S:[]},
+ {id:'kneeFlex',label:'무릎 굴곡',P:['bf','sm'],S:['gas','sart']},
+ {id:'kneeExt',label:'무릎 신전',P:['vl','vm','rf'],S:['tfl']},
+ {id:'trunkRot',label:'몸통 회전',P:['obl'],S:['erec','rect']}];
+const TY={con:'단축성',ecc:'신장성',iso:'등척성'}, nm=id=>MU.find(m=>m.id===id).n;
+let MDEL=new Set(); try{ MDEL=new Set(JSON.parse(localStorage.getItem('coachPro.musDel')||'[]')); }catch(e){}
+const saveM=()=>{ try{ localStorage.setItem('coachPro.musDel',JSON.stringify([...MDEL])); }catch(e){} };
+const MGROUPS=()=>[...new Set(MU.map(m=>m.g))];
+function muGeom(m,S,SS,F){
+  const ids={t:S==='L'?[23,25]:[24,26],s:S==='L'?[25,27]:[26,28],ua:S==='L'?[11,13]:[12,14],fa:S==='L'?[13,15]:[14,16],k:S==='L'?[23,11]:[24,12]}[m.seg];
+  const A=SS.V(ids[0]),B=SS.V(ids[1]); if(!A||!B) return null;
+  const ax=VM.sub(B,A), len=VM.len(ax); if(len<1e-4) return null;
+  const k=len/({k:.5,ua:.3,fa:.26,s:.42,t:.42}[m.seg]), sg=S==='L'?1:-1, d=m.d; let dv={x:0,y:0,z:0};
+  if(d.f) dv=VM.add(dv,VM.mul(F.fr,d.f)); if(d.b) dv=VM.add(dv,VM.mul(F.fr,-d.b)); if(d.o) dv=VM.add(dv,VM.mul(F.lr,sg*d.o)); if(d.i) dv=VM.add(dv,VM.mul(F.lr,-sg*d.i));
+  dv=VM.nrm(dv);
+  const c=VM.add(VM.add(A,VM.mul(ax,(m.a+m.b)/2)),VM.mul(dv,m.off*k)), lat=m.along==='lat';
+  return {c,dv,dir:lat?VM.mul(F.lr,sg):VM.nrm(ax),half:lat?m.hl*k:len*(m.b-m.a)*.55,rad:m.r*k};
+}
+/* 관절 각도(3D) → 어떤 근육이 일하는지 추정 */
+function angsP(p){
+  const S0=sceneOf(p); if(!S0) return null; const F=bodyFrame(S0); if(!F) return null; const V=S0.V, o={};
+  [['L',23,25,27,11,13,15,1],['R',24,26,28,12,14,16,-1]].forEach(([S,h,k,a,s,e,w,sg])=>{
+    const r={}, H=V(h),K=V(k),A=V(a),Sh=V(s),E=V(e),Wr=V(w);
+    if(H&&K&&A){ const d=VM.sub(K,H), x=VM.dot(d,F.lr)*sg, y=VM.dot(d,F.up), z=VM.dot(d,F.fr), t1=VM.nrm(VM.sub(H,K)), t2=VM.nrm(VM.sub(A,K));
+      r.hf=Math.atan2(z,-y)*DA; r.ha=Math.atan2(x,-y)*DA; r.kf=180-Math.acos(Math.max(-1,Math.min(1,VM.dot(t1,t2))))*DA; }
+    if(Sh&&E&&Wr){ const d=VM.sub(E,Sh), x=VM.dot(d,F.lr)*sg, y=VM.dot(d,F.up), z=VM.dot(d,F.fr), t1=VM.nrm(VM.sub(Sh,E)), t2=VM.nrm(VM.sub(Wr,E));
+      r.sf=Math.atan2(z,-y)*DA; r.sa=Math.atan2(x,-y)*DA; r.ef=180-Math.acos(Math.max(-1,Math.min(1,VM.dot(t1,t2))))*DA; }
+    o[S]=r; });
+  const sv=VM.sub(V(11),V(12)), hv=VM.sub(V(23),V(24)); o.tr=Math.atan2(sv.x*hv.z-sv.z*hv.x,sv.x*hv.x+sv.z*hv.z)*DA; return o;
+}
+function muAct(p){
+  const map={}, lines=[]; LASTACT={map,lines};
+  if(!track||!p) return LASTACT;
+  const d=.1,T=video.currentTime, A0=angsP(p), A1=angsP(poseAt(track,Math.max(0,T-d))), A2=angsP(poseAt(track,Math.max(0,T-2*d)));
+  if(!A0||!A1||!A2) return LASTACT;
+  const R=id=>RULES.find(r=>r.id===id);
+  const put=(S0,r,type)=>{ if(!r||MDEL.has(r.id)) return; (r.id==='trunkRot'?['L','R']:[S0]).forEach(S=>{ r.S.forEach(id=>{ if(!map[S+id]) map[S+id]={role:'S',type}; }); r.P.forEach(id=>{ map[S+id]={role:'P',type}; }); });
+    lines.push((r.id==='trunkRot'?'':(S0==='L'?'왼쪽 ':'오른쪽 '))+r.label+' · '+TY[type]+' — 주동 '+r.P.map(nm).join('·')+(r.S.length?' / 보조 '+r.S.map(nm).join('·'):'')); };
+  const axis=(S,get,pos,neg,hold)=>{ const v0=get(A0),v1=get(A1),v2=get(A2); if(v0==null||v1==null||v2==null) return; const w=dfa(v0,v1)/d, w1=dfa(v1,v2)/d;
+    if(Math.abs(w)>45){ const dec=Math.sign(w)===Math.sign(w1)&&Math.abs(w)<.8*Math.abs(w1);
+      if(neg) put(S,R(dec?(w>0?neg:pos):(w>0?pos:neg)),dec?'ecc':'con'); else put(S,R(pos),dec?'ecc':'con'); }
+    else if(hold&&v0>hold[0]) put(S,R(hold[1]),'iso'); };
+  ['L','R'].forEach(S=>{ if(!A0[S]||!A1[S]||!A2[S]) return;
+    axis(S,a=>a[S]&&a[S].hf,'hipFlex','hipExt',[45,'hipFlex']); axis(S,a=>a[S]&&a[S].ha,'hipAbd','hipAdd',[30,'hipAbd']); axis(S,a=>a[S]&&a[S].kf,'kneeFlex','kneeExt',[60,'kneeFlex']);
+    axis(S,a=>a[S]&&a[S].sf,'shFlex','shExt',[80,'shFlex']); axis(S,a=>a[S]&&a[S].sa,'shAbd','shAdd',[60,'shAbd']); axis(S,a=>a[S]&&a[S].ef,'elFlex','elExt',[75,'elFlex']); });
+  axis('L',a=>a.tr,'trunkRot',null,null);
+  return LASTACT;
+}
+/* 근육별 운동: [이름, 종류(힘·속도·파워), 한 줄 설명] — 파워 = 힘 × 속도 */
+const MUEX={
+ delt:[['덤벨 숄더프레스','힘','어깨 힘의 기본'],['밴드 빠른 지르기','속도','밴드 걸고 앞으로 번개처럼'],['메디신볼 오버헤드 슬램','파워','머리 위에서 폭발적으로 내리치기']],
+ pec:[['푸시업','힘','가슴·삼두 기본 힘'],['밴드 체스트 프레스 빠르게','속도','밀어낼 때 최대한 빠르게'],['클랩 푸시업','파워','폭발적으로 밀어 올려 박수']],
+ bic:[['덤벨 컬','힘','팔꿈치 굽히는 힘'],['밴드 인수(당기기) 빠르게','속도','주먹 당기는 속도'],['풀업 폭발 올라가기','파워','올라갈 때 최대한 빠르게']],
+ tri:[['딥스','힘','팔 펴는 힘'],['밴드 푸시다운 빠르게','속도','쭉 펴는 속도'],['클로즈그립 클랩 푸시업','파워','지르기 폭발력']],
+ fflx:[['리스트 컬','힘','손목 굽힘 힘'],['악력기 빠르게 쥐기','속도','주먹 쥐는 속도'],['파머스 워크','힘','무거운 걸 들고 걷기(악력)']],
+ fext:[['리버스 리스트 컬','힘','손목 펴는 힘'],['밴드 손가락 벌리기','힘','손가락 펴는 힘'],['손목 스냅 빠르게','속도','손목 고정·빠른 스냅']],
+ trap:[['덤벨 슈러그','힘','어깨 으쓱 힘'],['페이스 풀','힘','어깨뼈 모으는 힘'],['파워 슈러그','파워','다리 반동으로 폭발적으로 들기']],
+ lat:[['랫 풀다운','힘','등 넓게 당기는 힘'],['밴드 인수 당기기 빠르게','속도','반대 주먹 당기는 속도'],['메디신볼 슬램','파워','등·몸통으로 던져 내리기']],
+ rect:[['플랭크','힘','복부 버티는 힘'],['행잉 레그 레이즈','힘','복부 말아 올리기'],['메디신볼 슬램','파워','복부 폭발적 수축']],
+ obl:[['사이드 플랭크','힘','옆구리 버티기'],['러시안 트위스트 빠르게','속도','몸통 회전 속도'],['메디신볼 로테이셔널 스로우','파워','회전력(돌려차기·지르기)']],
+ erec:[['백 익스텐션','힘','허리 펴는 힘'],['루마니안 데드리프트','힘','허리·햄스트링 힘'],['케틀벨 스윙','파워','엉덩이·허리 폭발력']],
+ psoas:[['행잉 니 레이즈','힘','무릎 끌어올리는 힘'],['하이 니 빠르게','속도','무릎 올리는 속도'],['밴드 니 드라이브','파워','앞차기 무릎 끌어올리기']],
+ gmax:[['힙 쓰러스트','힘','엉덩이 힘의 왕'],['글루트 브릿지 빠르게','속도','엉덩이 펴는 속도'],['케틀벨 스윙','파워','뒷발로 미는 폭발력']],
+ gmed:[['클램쉘','힘','골반 옆 안정'],['밴드 래터럴 워크','힘','옆으로 걷기'],['스케이터 점프','파워','옆으로 밀고 뛰기']],
+ rf:[['레그 익스텐션','힘','무릎 펴는 힘'],['밴드 앞차기 빠르게','속도','앞차기 속도'],['점프 스쿼트','파워','다리 폭발력']],
+ vl:[['스쿼트','힘','하체 기본 힘'],['스텝업','힘','한 다리 힘'],['박스 점프','파워','다리 폭발력']],
+ vm:[['터미널 니 익스텐션','힘','무릎 안쪽 힘'],['불가리안 스플릿 스쿼트','힘','서기 안정'],['점프 런지','파워','앞굽이 폭발력']],
+ tfl:[['밴드 사이드 레그 레이즈','힘','다리 옆으로 들기'],['밴드 옆차기 빠르게','속도','옆차기 속도'],['사이드 점프 런지','파워','옆으로 폭발적 이동']],
+ sart:[['크로스 레그 레이즈','힘','다리 접어 돌리기'],['밴드 돌려차기 빠르게','속도','다리 접는 속도'],['니 드라이브 점프','파워','접어 차올리기']],
+ add:[['사이드 런지','힘','허벅지 안쪽 힘'],['밴드 다리 모으기 빠르게','속도','다리 모으는 속도'],['스케이터 점프','파워','안쪽 밀어내는 힘']],
+ bf:[['루마니안 데드리프트','힘','햄스트링 힘'],['레그 컬 빠르게','속도','무릎 접는 속도'],['케틀벨 스윙','파워','뒷다리 폭발력']],
+ sm:[['레그 컬','힘','무릎 접는 힘'],['노르딕 햄스트링 컬','힘','햄스트링 버티기'],['박스 점프','파워','다리 뒤쪽 폭발력']],
+ gas:[['카프 레이즈','힘','종아리 힘'],['줄넘기','속도','발끝 탄력과 속도'],['카프 점프(호핑)','파워','발끝 튕기기']],
+ sol:[['앉아서 카프 레이즈','힘','깊은 종아리 힘'],['빠른 제자리 발끝 뛰기','속도','발목 속도'],['플라이오 팝 점프','파워','발목 폭발력']],
+ tib:[['토 레이즈','힘','발끝 들기'],['밴드 발끝 당기기 빠르게','속도','발끝 당기는 속도'],['발끝 걷기·뒤꿈치 걷기','힘','발목 균형']]};
+function muDetail(id,S){
+  const m=MU.find(x=>x.id===id); if(!m) return '';
+  const ex=(MUEX[id]||[]).map(([n,k,d])=>{ const q=encodeURIComponent(n+' 운동 방법'), tag=encodeURIComponent(n.replace(/[^\p{L}\p{N}]/gu,''));
+    return `<div class="exr"><span class="kd kd${k}">${k}</span> <span class="exn">${n}</span><div class="sub">${d}</div>`
+     +`<a class="yt" href="https://www.youtube.com/results?search_query=${q}" target="_blank" rel="noopener noreferrer">▶ 유튜브</a>`
+     +`<a class="gg" href="https://www.google.com/search?q=${q}" target="_blank" rel="noopener noreferrer">🔎 구글</a>`
+     +`<a class="ig" href="https://www.instagram.com/explore/tags/${tag}/" target="_blank" rel="noopener noreferrer">📷 인스타</a></div>`; }).join('');
+  return `<b style="color:#ffd23f;font-size:15px">${m.n}</b><div class="sub">${m.g}${S?(S==='L'?' · 왼쪽':' · 오른쪽'):''}</div>`
+   +`<div class="tm"><b>📍 위치·붙는 곳</b>${m.pos}</div><div class="tm"><b>⚙ 하는 일</b>${m.act}</div><div class="tm"><b>🥋 무술에서</b>${m.tip}</div>`
+   +(ex?`<div class="tm"><b>🏋 파워(힘×속도)를 키우는 운동</b><div class="sub">힘은 💪 근력, 속도는 ⚡ 빠르게 쓰는 훈련, 파워는 둘을 합친 폭발력이에요. 눌러서 검색해 보세요.</div>${ex}<div class="sub" style="margin-top:6px">인스타는 이 기기 브라우저에서 이미 로그인돼 있으면 로그인된 채로 열려요. 로그인 정보는 앱이 건드릴 수 없어서, 로그인이 안 돼 있으면 인스타 화면에서 직접 로그인해야 해요.</div></div>`:'');
+}
+function bestSide(id){
+  if(G3&&!$('v3').hidden&&G3.best) return G3.best(id);
+  const c=MU2D.items.filter(x=>x.id===id).sort((a,b)=>b.z-a.z)[0]; return c?c.S:'L';
+}
+function selMu(id,S){
+  if(!id) MSEL=null; else MSEL={id,S:S||bestSide(id)};
+  if(G3&&!$('v3').hidden){ G3.focus(); if(MSEL){ curI='mu'; renderI(); } else if(curI==='mu'){ $('v3i').hidden=true; curI=null; } }
+  if(bodyOn){ focus2D(); refreshMuPanel(true); render(); }
+}
+/* ----- 2D 인체 모드: 영상 위에 근육 표시 ----- */
+const MUCOL={base:'rgba(205,72,60,.5)',P:'rgba(255,214,64,.82)',S:'rgba(74,214,140,.72)',sel:'rgba(77,208,255,.88)'};
+function drawBodyMuscles(){
+  MU2D.items=[];
+  if(!bodyOn||!pose) return;
+  const SS=sceneOf(pose); if(!SS) return; const F=bodyFrame(SS); if(!F) return;
+  const W=cv.width,H=cv.height,s=sc(),kp=W/SS.VW,act=muAct(pose);
+  const prj=q=>({x:(q.x/SS.SC+SS.X0)/SS.VW*W,y:(-q.y/SS.SC+SS.Y0)/SS.VH*H});
+  const items=[];
+  ['L','R'].forEach(S=>MU.forEach(m=>{
+    const g=muGeom(m,S,SS,F); if(!g||g.dv.z<-.25) return;
+    const c=prj(g.c), p1=prj(VM.add(g.c,VM.mul(g.dir,-g.half))), p2=prj(VM.add(g.c,VM.mul(g.dir,g.half)));
+    const hw=Math.max(2*s,g.rad/SS.SC*kp), hl=Math.max(Math.hypot(p2.x-p1.x,p2.y-p1.y)/2,hw*.8), ang=Math.atan2(p2.y-p1.y,p2.x-p1.x);
+    items.push({id:m.id,S,m,cx:c.x,cy:c.y,hl,hw,ang,z:g.c.z});
+  }));
+  items.sort((a,b)=>a.z-b.z);
+  ctx.save();
+  items.forEach(it=>{ const r=act.map[it.S+it.id], sel=MSEL&&MSEL.id===it.id&&MSEL.S===it.S;
+    ctx.beginPath(); ctx.ellipse(it.cx,it.cy,it.hl,it.hw,it.ang,0,Math.PI*2);
+    ctx.fillStyle=sel?MUCOL.sel:r?(r.role==='P'?MUCOL.P:MUCOL.S):MUCOL.base; ctx.fill();
+    ctx.lineWidth=(sel?3:1.2)*s; ctx.strokeStyle=sel?'#fff':'rgba(70,12,6,.65)'; ctx.stroke(); });
+  const sl=items.find(it=>MSEL&&MSEL.id===it.id&&MSEL.S===it.S);
+  if(sl){ ctx.textAlign='center'; label(sl.m.n,sl.cx,sl.cy-sl.hw-14*s,'#fff',20*s); ctx.textAlign='left'; }
+  ctx.restore();
+  MU2D.items=items; refreshMuPanel(false); if(MSEL&&zByMu&&!video.paused) focus2D();
+}
+function pickMuscle2D(e){
+  const p=pt(e,true);
+  const hit=[...MU2D.items].reverse().find(it=>{ const dx=p.x-it.cx,dy=p.y-it.cy,c=Math.cos(it.ang),s=Math.sin(it.ang),x=dx*c+dy*s,y=-dx*s+dy*c; return (x/it.hl)**2+(y/it.hw)**2<=1; });
+  if(hit) selMu(hit.id,hit.S); else if(MSEL) selMu(null);
+}
+function focus2D(){
+  if(!MSEL){ if(zByMu){ zoomFit(); zByMu=false; } return; }
+  const it=MU2D.items.find(x=>x.id===MSEL.id&&x.S===MSEL.S); if(!it) return;
+  const sw=stage.offsetWidth, sh=stage.offsetHeight, nx=MIR?1-it.cx/cv.width:it.cx/cv.width, ny=it.cy/cv.height;
+  const z=Math.max(1.8,Math.min(5,.2*cv.height/Math.max(it.hl,it.hw*1.5)));
+  ZV.z=z; ZV.x=-(nx-.5)*sw*z; ZV.y=-(ny-.5)*sh*z; applyZoom(); zByMu=true;
+}
+function muChips(act){ // 지금 쓰는 근육을 눌러 볼 수 있는 이름표 (재생 중에도 가능)
+  const ks=[]; MU.forEach(m=>['L','R'].forEach(S=>{ const r=act&&act.map[S+m.id]; if(r) ks.push([m,S,r]); }));
+  const key=ks.map(([m,S,r])=>S+m.id+r.role).join(',');
+  const ch=role=>ks.filter(x=>x[2].role===role).map(([m,S])=>`<span class="chip mu${role}" data-u="${m.id}" data-s="${S}">${S==='L'?'왼':'오'} ${m.n}</span>`).join(' ');
+  const P=ch('P'), Sx=ch('S');
+  return {key,html:key?(P?'<div>🟡 주동 '+P+'</div>':'')+(Sx?'<div style="margin-top:4px">🟢 보조 '+Sx+'</div>':'')+'<div class="sub" style="margin-top:4px">이름을 누르면 설명·운동이 나와요 (재생 중에도 돼요)</div>':'<div class="sub">뚜렷한 근육 움직임이 없는 순간이에요.</div>'};
+}
+function muNowText(){
+  const a=LASTACT; if(!a) return '지금 뚜렷하게 쓰이는 근육이 없어요 (또는 정밀 분석 전이에요)';
+  const P=[],S=[]; Object.keys(a.map).forEach(k=>{ const r=a.map[k], t=(k[0]==='L'?'왼':'오')+' '+nm(k.slice(1)); (r.role==='P'?P:S).push(t); });
+  if(!P.length&&!S.length) return '지금 뚜렷하게 쓰이는 근육이 없어요 (또는 정밀 분석 전이에요)';
+  return (P.length?'🟡 주동: '+P.join(', '):'')+(P.length&&S.length?'\n':'')+(S.length?'🟢 보조: '+S.join(', '):'');
+}
+function refreshMuPanel(force){
+  if(!bodyOn) return; const now=performance.now(); if(!force&&now-(refreshMuPanel.t||0)<350) return; refreshMuPanel.t=now;
+  const c=muChips(LASTACT||{map:{}}); if(c.key!==refreshMuPanel.k){ refreshMuPanel.k=c.key; $('muNow').innerHTML=c.html; }
+  if(force||!$('muChips').childElementCount){
+    $('muChips').innerHTML=MGROUPS().map(g=>`<div class="sub" style="margin-top:6px"><b style="color:#ffd23f">${g}</b></div><div>`+MU.filter(m=>m.g===g).map(m=>`<span class="chip${MSEL&&MSEL.id===m.id?' g':''}" data-u="${m.id}">${m.n}</span>`).join(' ')+'</div>').join('');
+    $('muInfo').innerHTML=MSEL?'<div class="muD">'+muDetail(MSEL.id,MSEL.S)+'</div><p><button data-x="1">↩ 전체 보기</button></p>':'<div class="sub">💪 영상 속 몸 위의 근육을 눌러 보세요. 누르면 그 근육이 확대되고 이름·하는 일이 여기에 나와요. 아래 이름표를 눌러도 돼요. 빈 곳을 누르면 원래대로 돌아가요.</div>';
+  }
+}
+$('muPanel').onclick=e=>{ const u=e.target.closest('[data-u]'); if(u){ selMu(u.dataset.u,u.dataset.s||null); return; } if(e.target.closest('[data-x]')) selMu(null); };
+$('muNow').addEventListener('pointerdown',e=>{ const c=e.target.closest('[data-u]'); if(c){ e.preventDefault(); selMu(c.dataset.u,c.dataset.s); } });
+let settingBody=false;
+async function setBody(on){
+  if(on===bodyOn||settingBody) return;
+  if(on&&!video.src){ toast('먼저 영상을 불러오세요'); return; }
+  settingBody=true;
+  try{
+    bodyOn=on; $('bodyBtn').classList.toggle('on',on); $('muPanel').hidden=!on;
+    if(on){
+      if(!track) await busyRun(()=>analyzeStudent());
+      if(!$('dock').classList.contains('open')) openDock(true);
+      setTool('muscle'); refreshMuPanel(true);
+    } else {
+      selMu(null); if(tool==='muscle') setTool($('dock').classList.contains('open')?'pen':'pan');
+    }
+  } finally { settingBody=false; render(); }
+}
+$('bodyBtn').onclick=()=>setBody(!bodyOn);
+
+/* ---------- 3D 동작 보기 (인체 모형 + 근육) ---------- */
 const PLN={s:'시상면',c:'관상면',t:'수평면'};
 const TERM_LIST=[
  {id:'flex',p:'s',n:'굴곡(굽힘)',c:'#5b93ff',t:'관절의 각도가 작아지는 움직임이에요. 무릎·팔꿈치를 접거나, 앞차기 준비 때 무릎을 끌어올리는 동작이에요.'},
@@ -2926,136 +3193,121 @@ const TERM_LIST=[
  {id:'rot',p:'t',n:'회전(돌림)',c:'#ff6b64',t:'몸통·골반·팔다리가 몸의 세로 축을 따라 도는 움직임이에요. 돌려차기에서 골반과 몸통을 돌리는 동작이 대표적이고, 팔다리는 안쪽돌림·바깥돌림으로 나눠 말해요.'}];
 let TDEL=new Set(); try{ TDEL=new Set(JSON.parse(localStorage.getItem('coachPro.termDel')||'[]')); }catch(e){}
 const saveDel=()=>{ try{ localStorage.setItem('coachPro.termDel',JSON.stringify([...TDEL])); }catch(e){} };
-let curI=null;
 const termHtml=(x,del)=>`<div class="tm">${del?`<button data-d="${x.id}">삭제</button>`:''}<b style="color:${x.c}">${x.n}</b>${x.t}</div>`;
 function showI(html){ const e=$('v3i'); e.innerHTML='<button data-c="1">닫기</button>'+html; e.hidden=false;
-  e.onclick=ev=>{ const d=ev.target.dataset; if(!d) return;
-    if(d.c){ e.hidden=true; curI=null; }
+  e.onclick=ev=>{ const t=ev.target.closest('[data-c],[data-d],[data-m],[data-r],[data-u],[data-x],[data-l]'); if(!t) return; const d=t.dataset;
+    if(d.c){ if(curI==='mu') selMu(null); e.hidden=true; curI=null; }
+    else if(d.u){ selMu(d.u,null); }
+    else if(d.x){ selMu(null); curI='m'; renderI(); }
+    else if(d.l){ curI='m'; renderI(); }
     else if(d.d){ const x=TERM_LIST.find(q=>q.id===d.d); askSave(`「${x.n}」 용어를 삭제할까요?`,()=>{ TDEL.add(x.id); saveDel(); renderI(); }); }
     else if(d.m){ const x=RULES.find(q=>q.id===d.m); askSave(`「${x.label}」 항목을 삭제할까요?`,()=>{ MDEL.add(x.id); saveM(); renderI(); }); }
     else if(d.r){ if(curI==='m'){ MDEL.clear(); saveM(); } else { TDEL.clear(); saveDel(); } renderI(); } }; }
 function renderI(){ if(!curI) return;
+  if(curI==='mu'){ if(!MSEL){ $('v3i').hidden=true; curI=null; return; }
+    showI('<div class="muD">'+muDetail(MSEL.id,MSEL.S)+'</div><p><button class="mchip" data-x="1">↩ 전체 보기</button> <button class="mchip" data-l="1">📋 근육표</button></p>'); return; }
   if(curI==='m'){ const l=RULES.filter(r=>!MDEL.has(r.id));
-    showI('<b>근육 판단표 (영상으로 추정)</b>동작마다 어떤 근육을 주동근(노랑)·보조근(초록)으로 보여 줄지 정한 표예요. 맞지 않는 항목은 삭제해 주세요.'+(l.length?l.map(r=>`<div class="tm"><button data-m="${r.id}">삭제</button><b style="color:#ffd23f">${r.label}</b>주동 ${r.P.map(nm).join('·')} / 보조 ${r.S.length?r.S.map(nm).join('·'):'없음'}</div>`).join(''):'<div class="tm">남은 항목이 없어요.</div>')+(MDEL.size?'<button data-r="1" style="float:none;margin-top:8px">삭제한 항목 모두 되돌리기</button>':'')); return; }
+    showI('<b>근육 전체 (눌러서 확대)</b><div class="sub">영상을 멈추고 몸 위의 근육을 직접 눌러도 돼요.</div>'
+      +MGROUPS().map(g=>`<div class="tm"><b style="color:#ffd23f">${g}</b>`+MU.filter(m=>m.g===g).map(m=>`<button class="mchip" data-u="${m.id}">${m.n}</button>`).join('')+'</div>').join('')
+      +'<details class="tm"><summary>근육 판단표 (영상 동작 → 근육)</summary>'+(l.length?l.map(r=>`<div class="tm"><button data-m="${r.id}">삭제</button><b style="color:#ffd23f">${r.label}</b>주동 ${r.P.map(nm).join('·')} / 보조 ${r.S.length?r.S.map(nm).join('·'):'없음'}</div>`).join(''):'<div class="tm">남은 항목이 없어요.</div>')+(MDEL.size?'<button data-r="1" style="float:none;margin-top:8px">삭제한 항목 모두 되돌리기</button>':'')+'</details>'); return; }
   if(curI==='g'){ const l=TERM_LIST.filter(x=>!TDEL.has(x.id));
     showI('<b>움직임 용어 목록</b>필요 없는 용어는 삭제를 눌러 지울 수 있어요.'+(l.length?l.map(x=>termHtml(x,true)).join(''):'<div class="tm">남은 용어가 없어요.</div>')+(TDEL.size?'<button data-r="1" style="float:none;margin-top:8px">삭제한 용어 모두 되돌리기</button>':'')); }
   else { const l=TERM_LIST.filter(x=>x.p===curI&&!TDEL.has(x.id));
     showI('<b>'+PLN[curI]+(l.length?' · '+l.map(x=>x.n.replace(/\(.*\)/,'')).join('과 '):'')+'</b>'+(l.length?l.map(x=>termHtml(x,false)).join(''):'이 면의 용어를 모두 삭제했어요. 📖 용어에서 되돌릴 수 있어요.')); } }
-/* 근육 표시 (영상 관절 움직임으로 추정) */
-const MU=[
- {id:'psoas',n:'엉덩허리근',seg:'t',a:0,b:.3,d:{f:1},off:.035,r:.032},
- {id:'rf',n:'대퇴직근',seg:'t',a:.05,b:.95,d:{f:1},off:.04,r:.03},
- {id:'vasti',n:'대퇴사두근(광근)',seg:'t',a:.25,b:.95,d:{f:1,o:.7},off:.045,r:.04},
- {id:'tfl',n:'대퇴근막장근',seg:'t',a:0,b:.35,d:{o:1,f:.4},off:.05,r:.025},
- {id:'sart',n:'봉공근',seg:'t',a:0,b:.8,d:{f:1,i:.6},off:.045,r:.018},
- {id:'gmax',n:'대둔근',seg:'t',a:-.05,b:.3,d:{b:1,o:.3},off:.07,r:.06},
- {id:'gmed',n:'중둔근',seg:'t',a:-.15,b:.15,d:{o:1,b:.3},off:.065,r:.045},
- {id:'ham',n:'햄스트링',seg:'t',a:.1,b:.95,d:{b:1},off:.05,r:.035},
- {id:'add',n:'내전근',seg:'t',a:.05,b:.7,d:{i:1},off:.05,r:.035},
- {id:'gas',n:'비복근',seg:'s',a:0,b:.6,d:{b:1},off:.045,r:.035},
- {id:'obl',n:'복사근',seg:'k',a:.1,b:.8,d:{o:1,f:.3},off:.1,r:.05},
- {id:'erec',n:'척추기립근',seg:'k',a:0,b:.95,d:{b:1,o:.35},off:.08,r:.035}];
-const RULES=[
- {id:'hipFlex',label:'엉덩관절 굴곡',P:['psoas','rf'],S:['tfl','sart']},
- {id:'hipExt',label:'엉덩관절 신전',P:['gmax','ham'],S:['add']},
- {id:'hipAbd',label:'엉덩관절 외전',P:['gmed','tfl'],S:['gmax']},
- {id:'hipAdd',label:'엉덩관절 내전',P:['add'],S:[]},
- {id:'kneeFlex',label:'무릎 굴곡',P:['ham'],S:['gas','sart']},
- {id:'kneeExt',label:'무릎 신전',P:['vasti','rf'],S:['tfl']},
- {id:'trunkRot',label:'몸통 회전',P:['obl'],S:['erec']}];
-const TY={con:'단축성',ecc:'신장성',iso:'등척성'}, nm=id=>MU.find(m=>m.id===id).n;
-let MDEL=new Set(), MUon=true; try{ MDEL=new Set(JSON.parse(localStorage.getItem('coachPro.musDel')||'[]')); }catch(e){}
-const saveM=()=>{ try{ localStorage.setItem('coachPro.musDel',JSON.stringify([...MDEL])); }catch(e){} };
-let G3=null;
-const BN3=[[11,12],[11,23],[12,24],[23,24],[11,13],[13,15],[12,14],[14,16],[23,25],[25,27],[24,26],[26,28],[27,29],[29,31],[27,31],[28,30],[30,32],[28,32]], JT3=[11,12,13,14,15,16,23,24,25,26,27,28,29,30,31,32];
 function load3(){ return new Promise((ok,no)=>{ if(window.THREE) return ok(); const t=document.createElement('script'); t.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'; t.onload=ok; t.onerror=()=>no(new Error('3D 라이브러리를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.')); document.head.appendChild(t); }); }
 function init3(){
-  const TH=THREE, cv=$('v3cv'), R=new TH.WebGLRenderer({canvas:cv,antialias:true,alpha:true}), sc=new TH.Scene(), cam=new TH.PerspectiveCamera(40,1,.05,50);
-  R.setPixelRatio(Math.min(devicePixelRatio,2)); sc.add(new TH.AmbientLight(0xffffff,.85)); const dl=new TH.DirectionalLight(0xffffff,.6); dl.position.set(2,4,3); sc.add(dl);
-  const body=new TH.Group(), PC={s:0x5b93ff,c:0x38c486,t:0xff6b64}, PL={}; sc.add(body);
+  const TH=THREE, cvs=$('v3cv'), R=new TH.WebGLRenderer({canvas:cvs,antialias:true,alpha:true}), sc3=new TH.Scene(), cam=new TH.PerspectiveCamera(40,1,.05,50);
+  R.setPixelRatio(Math.min(devicePixelRatio,2)); sc3.add(new TH.AmbientLight(0xffffff,.8));
+  const dl=new TH.DirectionalLight(0xffffff,.7); dl.position.set(2,4,3); sc3.add(dl); const dl2=new TH.DirectionalLight(0xffffff,.35); dl2.position.set(-2,2,-3); sc3.add(dl2);
+  const body=new TH.Group(), PC={s:0x5b93ff,c:0x38c486,t:0xff6b64}, PL={}; sc3.add(body);
   const mkP=(k,rot,w,h)=>{ const g=new TH.Group(), m=new TH.Mesh(new TH.PlaneGeometry(w,h),new TH.MeshBasicMaterial({color:PC[k],transparent:true,opacity:.2,side:TH.DoubleSide,depthWrite:false}));
     g.add(m,new TH.LineSegments(new TH.EdgesGeometry(m.geometry),new TH.LineBasicMaterial({color:PC[k]}))); g.rotation.set(...rot); body.add(g); PL[k]=g; };
   mkP('s',[0,Math.PI/2,0],1.5,2.1); mkP('c',[0,0,0],1.5,2.1); mkP('t',[-Math.PI/2,0,0],1.5,1.5); PL.s.position.y=PL.c.position.y=.3;
-  const M={t:new TH.MeshLambertMaterial({color:0xdfe6ee}),l:new TH.MeshLambertMaterial({color:0xff9f43}),r:new TH.MeshLambertMaterial({color:0x3ec6ff})};
-  const bones=BN3.map(([a,b])=>{ const m=new TH.Mesh(new TH.CylinderGeometry(1,1,1,10),a%2===b%2?(a%2?M.l:M.r):M.t); sc.add(m); return {a,b,m}; });
-  const jm=JT3.map(i=>{ const m=new TH.Mesh(new TH.SphereGeometry(.034,12,10),i%2?M.l:M.r); sc.add(m); return m; });
-  const head=new TH.Mesh(new TH.SphereGeometry(.11,16,12),M.t); sc.add(head);
-  const nose=new TH.Mesh(new TH.ConeGeometry(.03,.1,10),new TH.MeshLambertMaterial({color:0xffd23f})); sc.add(nose);
-  let VW=1,VH=1,X0=0,Y0=0,SC=0,ZS=1; const HZ={}; // 위치는 영상 속 2D 관절(화면과 동일), 깊이만 3D 값 사용
-  const V=(p,i)=>{ const q=p[i]; if(!q||q.x==null||!SC) return null; let z; if(q.wz!=null&&(q.visibility??1)>.35){ z=-q.wz*ZS; HZ[i]=z; } else z=HZ[i]??0; return new TH.Vector3((q.x*VW-X0)*SC,-(q.y*VH-Y0)*SC,z); }, Y=new TH.Vector3(0,1,0);
-  const cyl=new TH.CylinderGeometry(1,1,1,12), mat=(c,o)=>new TH.MeshLambertMaterial({color:c,transparent:true,opacity:o,depthWrite:false}), MP=mat(0xffd23f,.85), MS2=mat(0x38c486,.75), MN=mat(0xaab4c0,.06), LC={};
-  const lab=t=>LC[t]||(LC[t]=(()=>{ const c=document.createElement('canvas'); c.width=340; c.height=60; const g=c.getContext('2d'); g.fillStyle='rgba(20,24,30,.88)'; g.fillRect(0,0,340,60); g.fillStyle='#ffd23f'; g.font='bold 27px system-ui,sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(t,170,31); return new TH.CanvasTexture(c); })());
-  const MS=[]; ['L','R'].forEach(S=>MU.forEach(m=>{ const mesh=new TH.Mesh(cyl,MN), spr=new TH.Sprite(new TH.SpriteMaterial({transparent:true,depthTest:false})); spr.scale.set(.62,.11,1); mesh.visible=spr.visible=false; sc.add(mesh,spr); MS.push({S,m,mesh,spr}); }));
-  const DA=180/Math.PI, dfa=(x,y)=>{ let e=x-y; while(e>180) e-=360; while(e<-180) e+=360; return e; };
-  function angs(p){ if(!p) return null; const LH=V(p,23),RH=V(p,24),LS=V(p,11),RS=V(p,12); if(!(LH&&RH&&LS&&RS)) return null;
-    const lr=LH.clone().sub(RH).normalize(), up=LS.clone().add(RS).sub(LH).sub(RH).multiplyScalar(.5); up.addScaledVector(lr,-up.dot(lr)).normalize(); const fr=new TH.Vector3().crossVectors(lr,up), o={};
-    [['L',23,25,27,1],['R',24,26,28,-1]].forEach(([S,h,k,a,sg])=>{ const H=V(p,h),K=V(p,k),A=V(p,a); if(!H||!K||!A){ o[S]=null; return; }
-      const d=K.clone().sub(H), x=d.dot(lr)*sg, y=d.dot(up), z=d.dot(fr), t1=H.clone().sub(K).normalize(), t2=A.clone().sub(K).normalize();
-      o[S]={hf:Math.atan2(z,-y)*DA,ha:Math.atan2(x,-y)*DA,kf:180-Math.acos(Math.max(-1,Math.min(1,t1.dot(t2))))*DA}; });
-    const sv=LS.clone().sub(RS), hv=LH.clone().sub(RH); o.tr=Math.atan2(sv.x*hv.z-sv.z*hv.x,sv.x*hv.x+sv.z*hv.z)*DA; return o; }
-  function muState(p){ const d=.1,T=video.currentTime,A0=angs(p),A1=angs(poseAt(track,Math.max(0,T-d))),A2=angs(poseAt(track,Math.max(0,T-2*d))), map={}, lines=[]; if(!A0||!A1||!A2) return {map,lines};
-    const put=(S0,r,type)=>{ if(!r||MDEL.has(r.id)) return; (r.id==='trunkRot'?['L','R']:[S0]).forEach(S=>{ r.S.forEach(id=>{ if(!map[S+id]) map[S+id]={role:'S',type}; }); r.P.forEach(id=>{ map[S+id]={role:'P',type}; }); });
-      lines.push((r.id==='trunkRot'?'':(S0==='L'?'왼쪽 ':'오른쪽 '))+r.label+' · '+TY[type]+' — 주동 '+r.P.map(nm).join('·')+(r.S.length?' / 보조 '+r.S.map(nm).join('·'):'')); };
-    const R=id=>RULES.find(r=>r.id===id);
-    const axis=(S,get,pos,neg,hold)=>{ const v0=get(A0),v1=get(A1),v2=get(A2); if(v0==null||v1==null||v2==null) return; const w=dfa(v0,v1)/d, w1=dfa(v1,v2)/d;
-      if(Math.abs(w)>45){ const dec=Math.sign(w)===Math.sign(w1)&&Math.abs(w)<.8*Math.abs(w1); // 속도가 줄어드는 중이면 반대쪽 근육이 늘어나며 브레이크
-        if(neg) put(S,R(dec?(w>0?neg:pos):(w>0?pos:neg)),dec?'ecc':'con'); else put(S,R(pos),dec?'ecc':'con'); }
-      else if(hold&&v0>hold[0]) put(S,R(hold[1]),'iso'); };
-    ['L','R'].forEach(S=>{ if(!A0[S]||!A1[S]||!A2[S]) return;
-      axis(S,a=>a[S]&&a[S].hf,'hipFlex','hipExt',[45,'hipFlex']); axis(S,a=>a[S]&&a[S].ha,'hipAbd','hipAdd',[30,'hipAbd']); axis(S,a=>a[S]&&a[S].kf,'kneeFlex','kneeExt',[60,'kneeFlex']); });
-    axis('L',a=>a.tr,'trunkRot',null,null); return {map,lines}; }
-  function muUpd(p){ const mu=$('v3mu');
-    if(!MUon){ mu.textContent=''; return; }
-    if(!track){ mu.textContent='근육 표시는 "⚡ 동작 정밀 분석" 후에 나와요.'; return; }
-    const st=muState(p), q=body.quaternion, LR=new TH.Vector3(1,0,0).applyQuaternion(q), FR=new TH.Vector3(0,0,1).applyQuaternion(q);
-    MS.forEach(o=>{ const {S,m}=o, sg=S==='L'?1:-1, i=S==='L'; let A,B;
-      if(m.seg==='t'){ A=V(p,i?23:24); B=V(p,i?25:26); } else if(m.seg==='s'){ A=V(p,i?25:26); B=V(p,i?27:28); } else { A=V(p,i?23:24); B=V(p,i?11:12); }
-      if(!A||!B) return; const ax=B.clone().sub(A), len=ax.length(), k=len/(m.seg==='k'?.5:.42), dv=new TH.Vector3();
-      if(m.d.f) dv.addScaledVector(FR,m.d.f); if(m.d.b) dv.addScaledVector(FR,-m.d.b); if(m.d.o) dv.addScaledVector(LR,sg*m.d.o); if(m.d.i) dv.addScaledVector(LR,-sg*m.d.i); dv.normalize();
-      const c=A.clone().addScaledVector(ax,(m.a+m.b)/2).addScaledVector(dv,m.off*k), r=st.map[S+m.id];
-      o.mesh.visible=true; o.mesh.position.copy(c); o.mesh.scale.set(m.r*k,len*(m.b-m.a),m.r*k); o.mesh.quaternion.setFromUnitVectors(Y,ax.normalize());
-      o.mesh.material=r?(r.role==='P'?MP:MS2):MN;
-      if(r&&r.role==='P'){ o.spr.visible=true; o.spr.material.map=lab(m.n+' '+TY[r.type]); o.spr.material.needsUpdate=true; o.spr.position.copy(c).addScaledVector(LR,sg*.24); } });
-    mu.textContent=(st.lines.length?st.lines.join('\n'):'뚜렷한 근육 움직임이 없는 순간이에요.')+'\n※ 영상으로 추정한 값이에요.'; }
-  let th=0,ph=1.4,rad=3.2,tg=null,lw=0,lh=0; const pt=new Map(); let pd=0;
-  const w=$('v3w');
-  w.addEventListener('pointerdown',e=>{ pt.set(e.pointerId,[e.clientX,e.clientY]); w.setPointerCapture(e.pointerId); tg=null; });
-  w.addEventListener('pointermove',e=>{ const q=pt.get(e.pointerId); if(!q) return;
-    if(pt.size===1){ th-=(e.clientX-q[0])*.008; ph=Math.min(3.1,Math.max(.03,ph-(e.clientY-q[1])*.008)); }
+  const vec=v=>new TH.Vector3(v.x,v.y,v.z), Y=new TH.Vector3(0,1,0);
+  /* 인체 모형(반투명 껍질) */
+  const SH=new TH.MeshLambertMaterial({color:0xcfd8e3,transparent:true,opacity:.3,depthWrite:false});
+  const sph=new TH.SphereGeometry(1,22,16), tp=(rt,rb)=>new TH.CylinderGeometry(rt,rb,1,20,1);
+  const shell=(g,par)=>{ const m=new TH.Mesh(g,SH); m.renderOrder=3; m.visible=false; (par||sc3).add(m); return m; };
+  const LIMBS=[[11,13,.046,.036],[12,14,.046,.036],[13,15,.036,.026],[14,16,.036,.026],[23,25,.078,.052],[24,26,.078,.052],[25,27,.052,.034],[26,28,.052,.034],[29,31,.03,.02],[30,32,.03,.02]].map(([a,b,ra,rb])=>({a,b,m:shell(tp(rb,ra))}));
+  const JTS=[[11,.055],[12,.055],[13,.04],[14,.04],[15,.027],[16,.027],[23,.08],[24,.08],[25,.056],[26,.056],[27,.038],[28,.038]].map(([i,r])=>({i,r,m:shell(sph)}));
+  const HANDS=[[13,15],[14,16]].map(([e,w])=>({e,w,m:shell(sph)}));
+  const chest=shell(sph,body), belly=shell(sph,body), pelvis=shell(sph,body), head=shell(sph), neck=shell(tp(.045,.052));
+  const nose=new TH.Mesh(new TH.ConeGeometry(.03,.1,10),new TH.MeshLambertMaterial({color:0xffd23f})); nose.visible=false; sc3.add(nose);
+  /* 근육 (양쪽 × 종류) */
+  const mat=(c,e)=>new TH.MeshLambertMaterial({color:c,emissive:e||0x000000});
+  const MN=mat(0xc4584c,0x2a0805), MP=mat(0xffd23f,0x4a3a00), MS2=mat(0x38c486,0x0a3a22), MSL=mat(0x4dd0ff,0x0a4a66);
+  const MS=[]; ['L','R'].forEach(S=>MU.forEach(m=>{ const mesh=new TH.Mesh(sph,MN); mesh.visible=false; sc3.add(mesh); MS.push({S,m,mesh,dv:null}); }));
+  /* 카메라 */
+  let th=0,ph=1.4,rad=3.2,tg=null,lw=0,lh=0,pd=0,dn=null,zooming=false,radT=3.2,curKey=''; const pt3=new Map(), ctr=new TH.Vector3(0,.2,0), ctrT=new TH.Vector3(0,.2,0);
+  const w=$('v3w'), ray=new TH.Raycaster(), mv=new TH.Vector2();
+  let lastKey=null,lastAt=0; const setMu=(key,html)=>{ const n=performance.now(); if(key!==lastKey&&(n-lastAt>300||!key||!lastKey)){ lastKey=key; lastAt=n; $('v3mu').innerHTML=html; } };
+  $('v3mu').addEventListener('pointerdown',e=>{ const c=e.target.closest('[data-u]'); if(c){ e.preventDefault(); selMu(c.dataset.u,c.dataset.s); } });
+  function pickAt(e){
+    const r=cvs.getBoundingClientRect(); mv.set((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height)*2+1); ray.setFromCamera(mv,cam);
+    const hit=ray.intersectObjects(MS.filter(o=>o.mesh.visible).map(o=>o.mesh),false)[0], o=hit&&MS.find(q=>q.mesh===hit.object);
+    if(!o){ if(MSEL) selMu(null); return; }
+    selMu(o.m.id,o.S);
+  }
+  w.addEventListener('pointerdown',e=>{ if(e.target.closest('#v3i')) return; pt3.set(e.pointerId,[e.clientX,e.clientY]); w.setPointerCapture(e.pointerId); tg=null; zooming=false; dn=pt3.size===1?{x:e.clientX,y:e.clientY,t:performance.now(),m:false}:null; });
+  w.addEventListener('pointermove',e=>{ const q=pt3.get(e.pointerId); if(!q) return;
+    if(dn&&Math.hypot(e.clientX-dn.x,e.clientY-dn.y)>6) dn.m=true;
+    if(pt3.size===1){ th-=(e.clientX-q[0])*.008; ph=Math.min(3.1,Math.max(.03,ph-(e.clientY-q[1])*.008)); }
     q[0]=e.clientX; q[1]=e.clientY;
-    if(pt.size===2){ const a=[...pt.values()], d=Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1]); if(pd) rad=Math.min(8,Math.max(1.5,rad*pd/d)); pd=d; } });
-  ['pointerup','pointercancel'].forEach(n=>w.addEventListener(n,e=>{ pt.delete(e.pointerId); pd=0; }));
-  w.addEventListener('wheel',e=>{ e.preventDefault(); rad=Math.min(8,Math.max(1.5,rad*(1+e.deltaY*.001))); },{passive:false});
+    if(pt3.size===2){ dn=null; const a=[...pt3.values()], d=Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1]); if(pd) rad=Math.min(8,Math.max(.5,rad*pd/d)); pd=d; } });
+  ['pointerup','pointercancel'].forEach(n=>w.addEventListener(n,e=>{ const had=pt3.has(e.pointerId); pt3.delete(e.pointerId); pd=0;
+    if(n==='pointerup'&&had&&dn&&!dn.m&&pt3.size===0&&performance.now()-dn.t<500) pickAt(e); dn=null; }));
+  w.addEventListener('wheel',e=>{ e.preventDefault(); zooming=false; rad=Math.min(8,Math.max(.5,rad*(1+e.deltaY*.001))); },{passive:false});
   document.querySelectorAll('#v3 [data-v]').forEach(b=>b.onclick=()=>{ const v=b.dataset.v.split(',').map(Number); tg=v; });
   document.querySelectorAll('#v3 .pc').forEach(b=>b.onclick=()=>{ const on=b.getAttribute('aria-pressed')!=='true'; b.setAttribute('aria-pressed',on); PL[b.dataset.p].visible=on; if(on){ curI=b.dataset.p; renderI(); } else { $('v3i').hidden=true; curI=null; } });
   function frame(){
-    if($('v3').hidden) { G3.run=false; return; } requestAnimationFrame(frame);
+    if($('v3').hidden){ G3.run=false; return; } requestAnimationFrame(frame);
     const W=w.clientWidth,H=w.clientHeight; if(W!==lw||H!==lh){ lw=W; lh=H; R.setSize(W,H,false); cam.aspect=W/H; cam.updateProjectionMatrix(); }
     if(tg){ th+=(tg[0]-th)*.15; ph+=(tg[1]-ph)*.15; }
-    cam.position.set(rad*Math.sin(ph)*Math.sin(th),.2+rad*Math.cos(ph),rad*Math.sin(ph)*Math.cos(th)); cam.lookAt(0,.2,0);
-    let p=track?poseAt(track,video.currentTime):pose, ok=!!(p&&p[11]&&p[12]&&p[23]&&p[24]&&p[23].x!=null); const T=video.currentTime;
-    if(ok) G3.last={p,T}; else if(G3.last&&Math.abs(T-G3.last.T)<.5){ p=G3.last.p; ok=true; } // 잠깐 인식이 끊겨도 직전 자세를 유지
-    if(ok){ VW=video.videoWidth||1; VH=video.videoHeight||1; X0=(p[23].x+p[24].x)/2*VW; Y0=(p[23].y+p[24].y)/2*VH;
-      const hc=(parseFloat($('hcm').value)||140)/100; SC=mpp||0;
-      if(!SC){ const tl=Math.hypot(((p[11].x+p[12].x)-(p[23].x+p[24].x))/2*VW,((p[11].y+p[12].y)-(p[23].y+p[24].y))/2*VH); SC=tl?hc*.29/tl:0; }
-      ZS=hc/1.7; }
+    const T=video.currentTime; let p=track?poseAt(track,T):pose, SS=sceneOf(p);
+    if(SS) G3.last={p,T}; else if(G3.last&&Math.abs(T-G3.last.T)<.5){ p=G3.last.p; SS=sceneOf(p); } // 잠깐 인식이 끊겨도 직전 자세를 유지
+    const F=SS?bodyFrame(SS):null, ok=!!(SS&&F);
     $('v3m').textContent=ok?'':(video.src?(track?'이 순간에는 사람이 인식되지 않았어요.':'먼저 "⚡ 동작 정밀 분석"을 실행하거나 "🦴 관절 표시"를 켜 주세요.'):'먼저 영상을 불러오세요.');
-    bones.forEach(o=>o.m.visible=false); jm.forEach(m=>m.visible=false); head.visible=false; nose.visible=false; MS.forEach(o=>{ o.mesh.visible=false; o.spr.visible=false; }); if(!ok) $('v3mu').textContent='';
+    LIMBS.forEach(o=>o.m.visible=false); JTS.forEach(o=>o.m.visible=false); HANDS.forEach(o=>o.m.visible=false);
+    chest.visible=belly.visible=pelvis.visible=head.visible=neck.visible=nose.visible=false; MS.forEach(o=>o.mesh.visible=false);
     if(ok){
-      bones.forEach(o=>{ const A=V(p,o.a),B=V(p,o.b); if(!A||!B) return; const d=B.clone().sub(A),L=d.length()||1e-4; o.m.visible=true; o.m.position.copy(A).addScaledVector(d,.5); o.m.scale.set(.022,L,.022); o.m.quaternion.setFromUnitVectors(Y,d.normalize()); });
-      JT3.forEach((i,k)=>{ const A=V(p,i); if(A){ jm[k].visible=true; jm[k].position.copy(A); } });
-      const E1=V(p,7),E2=V(p,8); if(E1&&E2){ head.visible=true; head.position.copy(E1).add(E2).multiplyScalar(.5); }
-      const LH=V(p,23),RH=V(p,24),LS=V(p,11),RS=V(p,12);
-      if(LH&&RH&&LS&&RS){ const lr=LH.clone().sub(RH).normalize(), up=LS.clone().add(RS).sub(LH).sub(RH).multiplyScalar(.5); up.addScaledVector(lr,-up.dot(lr)).normalize();
-        body.quaternion.slerp(new TH.Quaternion().setFromRotationMatrix(new TH.Matrix4().makeBasis(lr,up,new TH.Vector3().crossVectors(lr,up))),.35); body.position.copy(LH).add(RH).multiplyScalar(.5); }
-      if(head.visible){ const fr=new TH.Vector3(0,0,1).applyQuaternion(body.quaternion); nose.visible=true; nose.position.copy(head.position).addScaledVector(fr,.13); nose.quaternion.setFromUnitVectors(Y,fr); }
-      muUpd(p);
-    }
-    R.render(sc,cam); if(REC) recDraw();
+      const V=i=>{ const v=SS.V(i); return v&&vec(v); };
+      const LS=V(11),RS=V(12),LH=V(23),RH=V(24), HM=LH.clone().add(RH).multiplyScalar(.5), SM=LS.clone().add(RS).multiplyScalar(.5);
+      const Lt=SM.distanceTo(HM), u=Math.max(.35,Math.min(1.6,Lt/.5)), FR=vec(F.fr);
+      body.quaternion.setFromRotationMatrix(new TH.Matrix4().makeBasis(vec(F.lr),vec(F.up),FR)); body.position.copy(HM);
+      const swH=LS.distanceTo(RS)/2, hwH=LH.distanceTo(RH)/2;
+      chest.visible=belly.visible=pelvis.visible=true;
+      chest.position.set(0,.72*Lt,0); chest.scale.set(swH*1.02,.3*Lt,.125*u);
+      belly.position.set(0,.33*Lt,0); belly.scale.set(Math.max(hwH*1.15,swH*.8),.3*Lt,.105*u);
+      pelvis.position.set(0,-.01*Lt,0); pelvis.scale.set(hwH*1.3,.11*u,.11*u);
+      LIMBS.forEach(o=>{ const A=V(o.a),B=V(o.b); if(!A||!B) return; const d=B.clone().sub(A),L=d.length(); if(L<1e-4) return; o.m.visible=true; o.m.position.copy(A).addScaledVector(d,.5); o.m.scale.set(u,L,u); o.m.quaternion.setFromUnitVectors(Y,d.normalize()); });
+      JTS.forEach(o=>{ const A=V(o.i); if(A){ o.m.visible=true; o.m.position.copy(A); o.m.scale.set(o.r*u,o.r*u,o.r*u); } });
+      HANDS.forEach(o=>{ const E=V(o.e),Wr=V(o.w); if(!E||!Wr) return; const d=Wr.clone().sub(E).normalize(); o.m.visible=true; o.m.position.copy(Wr).addScaledVector(d,.055*u); o.m.scale.set(.032*u,.062*u,.02*u); o.m.quaternion.setFromUnitVectors(Y,d); });
+      const E1=V(7),E2=V(8);
+      if(E1&&E2){ const HC=E1.clone().add(E2).multiplyScalar(.5); head.visible=true; head.position.copy(HC); head.scale.set(.1*u,.125*u,.11*u); head.quaternion.copy(body.quaternion);
+        const dn2=HC.clone().sub(SM), nL=dn2.length(); if(nL>1e-4){ neck.visible=true; neck.position.copy(SM).addScaledVector(dn2,.5); neck.scale.set(u,nL*.9,u); neck.quaternion.setFromUnitVectors(Y,dn2.normalize()); }
+        nose.visible=true; nose.position.copy(HC).addScaledVector(FR,.125*u); nose.quaternion.setFromUnitVectors(Y,FR); }
+      let act={map:{},lines:[]};
+      if(MUon&&track) act=muAct(p);
+      if(MUon){ MS.forEach(o=>{ const g=muGeom(o.m,o.S,SS,F); if(!g) return; o.dv=g.dv; const me=o.mesh; me.visible=true; me.position.set(g.c.x,g.c.y,g.c.z); me.scale.set(g.rad,g.half,g.rad);
+          me.quaternion.setFromUnitVectors(Y,vec(g.dir)); const r=act.map[o.S+o.m.id], isSel=MSEL&&MSEL.id===o.m.id&&MSEL.S===o.S;
+          me.material=isSel?MSL:r?(r.role==='P'?MP:MS2):MN; }); }
+      if(MUon&&track){ const c=muChips(act); setMu(c.key||'none',c.html); } else setMu(MUon?'notrack':'off',MUon?'<div class="sub">근육 표시는 "⚡ 동작 정밀 분석" 후에 나와요.</div>':'');
+    } else setMu('noperson','');
+    /* 카메라: 근육을 고르면 그 근육 쪽으로 다가가고, 고르지 않으면 전신 */
+    const sel=MSEL&&MS.find(o=>o.S===MSEL.S&&o.m.id===MSEL.id), key=sel?MSEL.id+MSEL.S:'';
+    if(key!==curKey){ curKey=key; zooming=true; radT=sel?Math.min(1.6,Math.max(.85,Math.max(sel.mesh.scale.x,sel.mesh.scale.y)*5.5)):3.2; }
+    if(sel&&sel.mesh.visible){ ctrT.copy(sel.mesh.position); ctrT.y-=.2*radT; } else ctrT.set(0,.2,0);
+    ctr.lerp(ctrT,.15); if(zooming){ rad+=(radT-rad)*.15; if(Math.abs(rad-radT)<.02) zooming=false; }
+    SH.opacity=sel?.1:(MUon?.3:.88); SH.depthWrite=!MUon&&!sel;
+    cam.position.set(ctr.x+rad*Math.sin(ph)*Math.sin(th),ctr.y+rad*Math.cos(ph),ctr.z+rad*Math.sin(ph)*Math.cos(th)); cam.lookAt(ctr);
+    R.render(sc3,cam); if(REC) recDraw();
     $('v3play').textContent=$('play').textContent; $('v3seek').value=$('seek').value; $('v3loop').checked=$('loopOn').checked;
     $('v3t').textContent=`프레임 ${$('fno').textContent} · ${video.currentTime.toFixed(2)}초`+(loopA!=null?` · 구간 ${loopA.toFixed(2)}`:'')+(loopB!=null?`~${loopB.toFixed(2)}초`:'')+' · 노란 코 = 몸이 향한 방향';
   }
-  G3={run:false,start(){ if(!G3.run){ G3.run=true; requestAnimationFrame(frame); } }};
+  G3={run:false,last:null,
+    start(){ if(!G3.run){ G3.run=true; requestAnimationFrame(frame); } },
+    focus(){ if(!MSEL) return; const o=MS.find(q=>q.S===MSEL.S&&q.m.id===MSEL.id); if(o&&o.dv){ const t=Math.atan2(o.dv.x,o.dv.z); tg=[th+wrapA(t-th),1.3]; } },
+    best(id){ const a=MS.filter(o=>o.m.id===id&&o.mesh.visible); if(a.length<2) return a[0]?a[0].S:'L'; const cp=cam.position; return a.sort((x,y)=>x.mesh.position.distanceTo(cp)-y.mesh.position.distanceTo(cp))[0].S; }};
   $('v3rate').innerHTML=$('rate').innerHTML;
   $('v3rate').onchange=e=>{ $('rate').value=e.target.value; $('rate').dispatchEvent(new Event('change',{bubbles:true})); };
   $('v3prev').onclick=()=>$('prev').click(); $('v3next').onclick=()=>$('next').click(); $('v3play').onclick=()=>$('play').click();
@@ -3066,7 +3318,7 @@ function init3(){
 /* 3D 화면 녹화: 화면 공유 권한 없이 앱이 그린 3D 캔버스를 직접 녹화 */
 let REC=null;
 function recDraw(){ const {rc,ctx}=REC, cv=$('v3cv'); ctx.fillStyle='#0a0d11'; ctx.fillRect(0,0,rc.width,rc.height); ctx.drawImage(cv,0,0,rc.width,rc.height);
-  const fs=Math.max(13,Math.round(rc.width/40)), L=[$('v3t').textContent.split(' · 노란')[0],...$('v3mu').textContent.split('\n').filter(Boolean)], h=fs*1.45*L.length+fs*.6;
+  const fs=Math.max(13,Math.round(rc.width/40)), L=[$('v3t').textContent.split(' · 노란')[0],...((LASTACT&&LASTACT.lines)||[])], h=fs*1.45*L.length+fs*.6;
   ctx.fillStyle='rgba(10,13,17,.78)'; ctx.fillRect(0,rc.height-h,rc.width,h); ctx.fillStyle='#ffd23f'; ctx.font=`bold ${fs}px system-ui,sans-serif`; ctx.textBaseline='top';
   L.forEach((t,i)=>ctx.fillText(t,fs*.6,rc.height-h+fs*.4+i*fs*1.45,rc.width-fs*1.2)); }
 function recStart(){
