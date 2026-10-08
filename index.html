@@ -238,7 +238,9 @@ body.busy #dock{pointer-events:none;opacity:.55}
   <label class="chk"><input type="checkbox" id="grfOn"> 🦶 지면반력·무게중심</label>
   <label class="chk"><input type="checkbox" id="shiftOn"> ↔ 중심이동</label>
   <label class="chk"><input type="checkbox" id="wtOn" checked> ⚖ 체중 배분 막대</label>
+  <label class="chk"><input type="checkbox" id="kickOn" checked> 🦵 발차기 각도</label>
 </div>
+<div class="bar" id="kickBar" hidden></div>
 <div class="bar" id="pplBar" hidden>
   <span style="font-size:13px;font-weight:700">👥 분석 대상</span>
   <span id="pplChips"></span>
@@ -505,7 +507,7 @@ body.busy #dock{pointer-events:none;opacity:.55}
 </div>
 <div id="help" hidden role="dialog" aria-label="단축키">
   <div class="card">
-    <h3>⌨ 단축키 <small style="font-weight:400;color:var(--sub);font-size:11px">· 버전 10-08 19시</small></h3>
+    <h3>⌨ 단축키 <small style="font-weight:400;color:var(--sub);font-size:11px">· 버전 10-08 20시</small></h3>
     <table>
       <tr><td><kbd>Space</kbd></td><td>재생 / 일시정지 (프리즈 중에는 계속 재생)</td></tr>
       <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>1프레임 이동 (<kbd>Shift</kbd> 누르면 10프레임)</td></tr>
@@ -1259,6 +1261,45 @@ function weightSplit(q){
   pF=Math.max(0,Math.min(1,pF));
   return {pF,pR:1-pF};
 }
+/* ---------- 발차기 각도: 지지발 → 골반 → 차는 발 사이 각도 (지지발이 6시, 차는 발이 12시면 180°) ---------- */
+let KICKS=[];
+function kickGeom(l,W,H){ // 차는 다리 찾기 + 각도 (3D 좌표가 있으면 3D, 없으면 화면 기준)
+  if(!l||[23,24,25,26,27,28].some(k=>!l[k])) return null;
+  const kk=l[27].y<l[28].y?0:1, sk=1-kk, KA=l[27+kk], SA=l[27+sk], SK=l[25+sk];
+  if(!(KA.y<SK.y)) return null; // 차는 발이 지지 다리 무릎보다 높이 올라왔을 때만 '발차기'
+  const hm={x:(l[23].x+l[24].x)/2,y:(l[23].y+l[24].y)/2}, v2=(a)=>({x:(a.x-hm.x)*W,y:(a.y-hm.y)*H});
+  let ang;
+  const use3=$('angMode').value!=='2d'&&[23,24,27,28].every(k=>l[k].wx!=null);
+  if(use3){ const w=(a)=>({x:a.wx-(l[23].wx+l[24].wx)/2,y:a.wy-(l[23].wy+l[24].wy)/2,z:a.wz-(l[23].wz+l[24].wz)/2}), a=w(SA), b=w(KA);
+    ang=Math.acos(Math.max(-1,Math.min(1,(a.x*b.x+a.y*b.y+a.z*b.z)/((Math.hypot(a.x,a.y,a.z)*Math.hypot(b.x,b.y,b.z))||1))))*DA; }
+  else { const a=v2(SA), b=v2(KA); ang=Math.acos(Math.max(-1,Math.min(1,(a.x*b.x+a.y*b.y)/((Math.hypot(a.x,a.y)*Math.hypot(b.x,b.y))||1))))*DA; }
+  return ang>45?{ang,kick:kk,sup:sk,hm,KA,SA,d3:use3}:null; }
+function computeKicks(){
+  KICKS=[]; if(!track){ refreshKicks(); return; } const W=video.videoWidth,H=video.videoHeight; let cur=null;
+  track.forEach((f,i)=>{ const g=kickGeom(f.lm,W,H);
+    if(g){ if(!cur||i-cur.b>Math.round(.15*AFPS)) { cur={a:i,b:i,peak:g.ang,pi:i,leg:g.kick}; KICKS.push(cur); } else { cur.b=i; if(g.ang>cur.peak){ cur.peak=g.ang; cur.pi=i; } } } });
+  KICKS=KICKS.filter(k=>k.b-k.a>=Math.round(.08*AFPS)); refreshKicks(); }
+function refreshKicks(){ const el=$('kickBar'); if(!el) return;
+  el.hidden=!KICKS.length||!$('kickOn').checked;
+  el.innerHTML='<span class="sub" style="font-weight:700">🦵 발차기 최고 각도</span> '+KICKS.map((k,j)=>`<span class="chip" data-t="${(k.pi/AFPS).toFixed(3)}">${j+1}번 ${k.leg?'오른발':'왼발'} <b style="color:#ffd23f;margin:0">${Math.round(k.peak)}°</b> · ${(k.pi/AFPS).toFixed(1)}초</span>`).join(' ')+'<div class="sub" style="width:100%">누르면 그 발차기의 가장 높은 순간으로 가요. 지지발이 아래(6시), 차는 발이 머리 위(12시)면 180°예요.</div>'; }
+$('kickBar').onclick=e=>{ const c=e.target.closest('[data-t]'); if(!c) return; fz=null; video.pause(); video.currentTime=parseFloat(c.dataset.t); };
+$('kickOn').addEventListener('change',()=>{ refreshKicks(); render(); });
+function drawKick(){
+  if(!$('kickOn').checked||!pose) return;
+  const W=cv.width,H=cv.height,s=sc(), g=kickGeom(pose,video.videoWidth,video.videoHeight); if(!g) return;
+  const P=a=>({x:a.x*W,y:a.y*H}), Hm=P(g.hm), Sa=P(g.SA), Ka=P(g.KA);
+  ctx.save(); ctx.lineCap='round';
+  ctx.setLineDash([10*s,8*s]); ctx.lineWidth=5*s; ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.shadowColor='rgba(0,0,0,.8)'; ctx.shadowBlur=6*s;
+  ctx.beginPath(); ctx.moveTo(Sa.x,Sa.y); ctx.lineTo(Hm.x,Hm.y); ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle='#ffd23f'; ctx.lineWidth=6*s; ctx.beginPath(); ctx.moveTo(Hm.x,Hm.y); ctx.lineTo(Ka.x,Ka.y); ctx.stroke();
+  // 각도 호 (화면 기준으로 두 선 사이 안쪽)
+  const a1=Math.atan2(Sa.y-Hm.y,Sa.x-Hm.x), a2=Math.atan2(Ka.y-Hm.y,Ka.x-Hm.x); let da=a2-a1; while(da>Math.PI) da-=2*Math.PI; while(da<-Math.PI) da+=2*Math.PI;
+  const r=Math.min(70*s,Math.hypot(Ka.x-Hm.x,Ka.y-Hm.y)*.45); ctx.lineWidth=4*s; ctx.strokeStyle='rgba(255,210,63,.9)'; ctx.beginPath(); ctx.arc(Hm.x,Hm.y,r,a1,a1+da,da<0); ctx.stroke();
+  ctx.shadowBlur=0;
+  const i=Math.round(vtime()*AFPS), K=KICKS.find(k=>i>=k.a-2&&i<=k.b+2), mid=a1+da/2, tx=Hm.x+Math.cos(mid)*(r+44*s), ty=Hm.y+Math.sin(mid)*(r+44*s);
+  ctx.textAlign='center'; label(`🦵 ${Math.round(g.ang)}°`,tx,ty,'#ffd23f',30*s);
+  label(K?`이번 발차기 최고 ${Math.round(K.peak)}°`:'발차기 각도',tx,ty+26*s,'#fff',15*s); ctx.textAlign='left';
+  ctx.restore(); }
 function drawWeight(){
   if(!gb||!track||!$('wtOn')||!$('wtOn').checked||!($('grfOn').checked||$('shiftOn').checked)) return;
   const i=grfAt(), q=gbNear(i); if(!q) return;
@@ -1446,7 +1487,7 @@ const PERR=new Set();
 const safe=f=>{ ctx.save(); try{ f(); ctx.restore(); }catch(e){ const k=f.name||'draw'; if(!PERR.has(k)){ PERR.add(k); console.error(k,e); } for(let j=0;j<12;j++) ctx.restore(); } };
 function paintOverlays(){
   if(track) pose=poseAt(track,vtime());
-  [drawSkelDim,drawTrails,drawGhost,drawSkeleton,drawBodyMuscles,drawPose,drawForce,drawGRF,drawShift,drawWeight,drawCoachMark].forEach(safe);
+  [drawSkelDim,drawTrails,drawGhost,drawSkeleton,drawBodyMuscles,drawPose,drawForce,drawGRF,drawShift,drawWeight,drawKick,drawCoachMark].forEach(safe);
   safe(()=>{ hud(); drawPip(); drawScore(); });
   anns.filter(a=>vis(a)).forEach(a=>safe(()=>drawAnn(a)));
 }
@@ -1710,7 +1751,7 @@ function rebuildTrack(quick){
     return {t:f.t,lm:f.lm.map(p=>({...p,x:p.x-c.x/W,y:p.y-c.y/H}))}; });
   if(quick) return;
   rebuildViews();
-  calcStats(); refreshTrStats(); computeKin(); refreshForceRep();
+  calcStats(); refreshTrStats(); computeKin(); refreshForceRep(); computeKicks();
 }
 function startJoint(p){
   if(!trackClean){ alert('먼저 [⚡ 동작 정밀 분석]을 눌러 주세요. 분석된 관절만 고칠 수 있어요.'); return; }
@@ -4177,7 +4218,7 @@ document.addEventListener('drop',e=>{ if(!(e.dataTransfer&&e.dataTransfer.files&
 
 // 설정 기억 (이 기기 브라우저에 저장)
 const SET_VAL=['muCol','angMode','hcm','qual','rate','expRate','width','hold','grfDir','grfScale','trailLen','color','cmpColor'];
-const SET_CHK=[...AGIDS,'wtOn','autoAngle','snap','always','autoFreeze','stab','grfLabel','grfLeg','grfPhase','grfGnd','grfHead','skName','skRib','skHand','ghost','pip','scoreOn'];
+const SET_CHK=[...AGIDS,'wtOn','kickOn','autoAngle','snap','always','autoFreeze','stab','grfLabel','grfLeg','grfPhase','grfGnd','grfHead','skName','skRib','skHand','ghost','pip','scoreOn'];
 function saveSet(){ try{ const o={}; SET_VAL.forEach(id=>o[id]=$(id).value); SET_CHK.forEach(id=>o[id]=$(id).checked); localStorage.setItem('coachPro.v1',JSON.stringify(o)); }catch(e){} }
 function loadSet(){ try{
   const o=JSON.parse(localStorage.getItem('coachPro.v1')||'null'); if(!o) return;
