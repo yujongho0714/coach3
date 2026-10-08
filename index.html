@@ -507,7 +507,7 @@ body.busy #dock{pointer-events:none;opacity:.55}
 </div>
 <div id="help" hidden role="dialog" aria-label="단축키">
   <div class="card">
-    <h3>⌨ 단축키 <small style="font-weight:400;color:var(--sub);font-size:11px">· 버전 10-08 20시</small></h3>
+    <h3>⌨ 단축키 <small style="font-weight:400;color:var(--sub);font-size:11px">· 버전 10-08 21시</small></h3>
     <table>
       <tr><td><kbd>Space</kbd></td><td>재생 / 일시정지 (프리즈 중에는 계속 재생)</td></tr>
       <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>1프레임 이동 (<kbd>Shift</kbd> 누르면 10프레임)</td></tr>
@@ -1804,24 +1804,56 @@ function descOf(lm,W,H){ // 사람 한 명의 위치·크기 요약
 }
 function nearCenter(L){ let k=-1,bd=1e9; (L||[]).forEach((l,i)=>{ const a=l[23],b=l[24], v=a&&b?Math.hypot((a.x+b.x)/2-.5,(a.y+b.y)/2-.5):9; if(v<bd){bd=v;k=i} }); return bd<.3?k:-1; }
 function qualOf(l){ let s=0; [11,12,23,24,25,26,27,28].forEach(k=>s+=(l[k].visibility??1)); return s/8; }
-function mergePeople(a){ // 같은 사람이 여러 조각에서 중복으로 잡힌 것 합치기
-  const W=video.videoWidth,H=video.videoHeight, ar=b=>Math.max(0,b.x1-b.x0)*Math.max(0,b.y1-b.y0);
-  a=a.slice().sort((p,q)=>q.q-p.q||q.S-p.S); const keep=[];
-  a.forEach(p=>{
-    const dup=keep.some(k=>{
-      if(Math.hypot((p.cx-k.cx)*W,(p.cy-k.cy)*H)<.3*Math.max(p.S,k.S)) return true;
-      const x0=Math.max(p.box.x0,k.box.x0),x1=Math.min(p.box.x1,k.box.x1),y0=Math.max(p.box.y0,k.box.y0),y1=Math.min(p.box.y1,k.box.y1);
-      const inter=Math.max(0,x1-x0)*Math.max(0,y1-y0), m=Math.min(ar(p.box),ar(k.box));
-      return m>0&&inter/m>.65; });
-    if(!dup) keep.push(p); });
-  return keep;
+const CORE=[0,11,12,13,14,15,16,23,24,25,26,27,28];
+function torsoN(l){ return [11,12,23,24].filter(k=>(l[k].visibility??1)>=.5).length; }
+function torsoLen(l,W,H){ // 어깨 가운데~엉덩이 가운데 길이(픽셀), 모르면 0
+  const v=k=>(l[k].visibility??1)>=.4, s=[11,12].filter(v), h=[23,24].filter(v); if(!s.length||!h.length) return 0;
+  const m=ks=>({x:ks.reduce((a,k)=>a+l[k].x,0)/ks.length,y:ks.reduce((a,k)=>a+l[k].y,0)/ks.length}), A=m(s),B=m(h);
+  return Math.hypot((A.x-B.x)*W,(A.y-B.y)*H);
+}
+function mergePeople(a){ // 같은 사람이 여러 조각(머리만·팔만·다리만)으로 잡힌 것을 한 사람으로 합치기
+  const W=video.videoWidth,H=video.videoHeight, ar=b=>Math.max(0,b.x1-b.x0)*Math.max(0,b.y1-b.y0), n=a.length;
+  const frag=p=>torsoN(p.lm)<3||p.cut>1;
+  const same=(p,k)=>{
+    const T=Math.max(torsoLen(p.lm,W,H),torsoLen(k.lm,W,H),.25*Math.max(p.S,k.S),12), ds=[];
+    CORE.forEach(j=>{ const u=p.lm[j],w=k.lm[j]; if((u.visibility??1)>=.5&&(w.visibility??1)>=.5) ds.push(Math.hypot((u.x-w.x)*W,(u.y-w.y)*H)); });
+    if(ds.length>=2){ ds.sort((x,y)=>x-y); const md=ds[ds.length>>1]; if(md<.45*T) return true; if(md>.9*T) return false; }
+    const b=p.box,c=k.box, x0=Math.max(b.x0,c.x0),x1=Math.min(b.x1,c.x1),y0=Math.max(b.y0,c.y0),y1=Math.min(b.y1,c.y1);
+    const inter=Math.max(0,x1-x0)*Math.max(0,y1-y0), m=Math.min(ar(b),ar(c));
+    if(m>0&&inter/m>.65) return true;
+    if(!(frag(p)||frag(k))) return Math.hypot((p.cx-k.cx)*W,(p.cy-k.cy)*H)<.3*Math.max(p.S,k.S);
+    // 조각이면: 겹치거나 맞닿아 있으면 같은 사람
+    const gx=Math.max(0,Math.max(b.x0,c.x0)-Math.min(b.x1,c.x1))*W, gy=Math.max(0,Math.max(b.y0,c.y0)-Math.min(b.y1,c.y1))*H;
+    return (m>0&&inter/m>.2)||Math.hypot(gx,gy)<.35*T;
+  };
+  const par=a.map((_,i)=>i), f=i=>par[i]===i?i:(par[i]=f(par[i])), whole=a.map(p=>!frag(p));
+  // 1) 온전한 사람끼리 중복 합치기  2) 조각은 가장 가까운 '한' 사람에게만 붙이기(옆 사람끼리 이어 붙지 않게)  3) 남은 조각끼리
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) if(whole[i]&&whole[j]&&f(i)!==f(j)&&same(a[i],a[j])) par[f(j)]=f(i);
+  for(let i=0;i<n;i++){ if(whole[i]) continue; let bj=-1,bd=1e9;
+    for(let j=0;j<n;j++) if(whole[j]&&same(a[i],a[j])){ const d=Math.hypot((a[i].cx-a[j].cx)*W,(a[i].cy-a[j].cy)*H)/a[j].S; if(d<bd){bd=d;bj=j} }
+    if(bj>=0){ par[i]=f(bj); whole[i]=null; } }
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) if(whole[i]===false&&whole[j]===false&&f(i)!==f(j)&&same(a[i],a[j])) par[f(j)]=f(i);
+  const G={}; a.forEach((p,i)=>(G[f(i)]=G[f(i)]||[]).push(p));
+  return Object.values(G).map(g=>{
+    if(g.length===1) return g[0];
+    g.sort((p,q)=>(p.cut-q.cut)||(torsoN(q.lm)-torsoN(p.lm))||(q.q-p.q)||(q.S-p.S));
+    const lm=g[0].lm.map((_,j)=>{ let b=null,bv=-1; g.forEach((p,r)=>{ const v=(p.lm[j].visibility??1)-r*.02; if(v>bv){bv=v;b=p.lm[j]} }); return {...b}; });
+    return {lm,...descOf(lm,W,H),q:qualOf(lm),cut:0};
+  });
 }
 async function scanPeople(lm,t,snap){ // 한 장면에서 보이는 사람 모두 찾기 (멀리 있는 사람은 조각조각 확대해서 찾기)
   const W=video.videoWidth,H=video.videoHeight;
   if(Math.abs(video.currentTime-t)>1e-3) await seekTo(video,t);
   snap.width=W; snap.height=H; snap.getContext('2d').drawImage(video,0,0,W,H);
   const all=[];
-  const add=(res,x0,y0,w,h)=>{ (res.landmarks||[]).forEach(r=>{ const l=r.map(p=>({x:(x0+p.x*w)/W,y:(y0+p.y*h)/H,visibility:p.visibility??1})); all.push({lm:l,...descOf(l,W,H),q:qualOf(l)}); }); };
+  const add=(res,x0,y0,w,h)=>{ const tile=w<W||h<H, e=.015;
+    (res.landmarks||[]).forEach(r=>{ let cut=0;
+      const l=r.map((p,k)=>{ let v=p.visibility??1;
+        if(tile){ // 잘린 조각 안에서 찾은 사람: 조각 밖으로 나간 관절은 지어낸 것이라 버림
+          const out=(p.x<e&&x0>0)||(p.x>1-e&&x0+w<W-1)||(p.y<e&&y0>0)||(p.y>1-e&&y0+h<H-1);
+          if(out){ if(CORE.includes(k)&&v>=.3) cut++; v=0; } }
+        return {x:(x0+p.x*w)/W,y:(y0+p.y*h)/H,visibility:v}; });
+      all.push({lm:l,...descOf(l,W,H),q:qualOf(l),cut}); }); };
   add(lm.detect(snap),0,0,W,H);
   if($('farOn')?$('farOn').checked:true){
     const tc=document.createElement('canvas');
@@ -1832,7 +1864,7 @@ async function scanPeople(lm,t,snap){ // 한 장면에서 보이는 사람 모�
         tc.getContext('2d').drawImage(snap,sx,sy,tw,th,0,0,tw,th);
         try{ add(lm.detect(tc),sx,sy,tw,th); }catch(e){}
       } } }
-  return mergePeople(all).filter(p=>p.S>H*0.03);
+  return mergePeople(all).filter(p=>p.S>H*0.03&&torsoN(p.lm)>=2); // 몸통(어깨·엉덩이) 없는 팔·다리 조각은 사람으로 안 셈
 }
 function nearCenterAt(L,cx,cy,thr){ let k=-1,bd=1e9; (L||[]).forEach((l,i)=>{ const a=l[23],b=l[24], v=a&&b?Math.hypot((a.x+b.x)/2-cx,(a.y+b.y)/2-cy):9; if(v<bd){bd=v;k=i} }); return bd<thr?k:-1; }
 async function choosePeople(opt={}){ // null=한 명뿐(기존 방식) · false=취소 · 객체=고른 결과
