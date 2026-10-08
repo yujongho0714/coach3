@@ -86,6 +86,11 @@ body.busy #save2{pointer-events:none;opacity:.5}
 #v3cv{width:100%;height:100%;display:block}
 body.v3open #dock{display:none!important} /* 3D 화면에서는 그리기 도구함을 숨겨요 (화면을 가리지 않게) */
 body.v3open #toast{z-index:80}
+#dkPick{position:fixed;inset:0;z-index:90;background:rgba(8,10,14,.55);touch-action:none;-webkit-user-select:none;user-select:none;display:flex;align-items:flex-start;justify-content:center;padding-top:calc(70px + env(safe-area-inset-top,0px))}
+#dkPick>div{background:rgba(20,26,34,.96);border:1px solid #ffd23f;border-radius:14px;padding:12px 16px;text-align:center;font-size:14px;line-height:1.6;color:#fff;max-width:88vw}
+#dkPick b{color:#ffd23f} #dkPick small{color:var(--sub)} #dkPick button{margin-top:8px}
+body.dkpick #dock{z-index:95;pointer-events:none}
+#dock,#dock *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 #v3m{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:#cfd6df;font-size:14px;line-height:1.6;pointer-events:none}
 .v3r{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
 #v3t{font-size:12px;color:var(--sub);margin-top:4px}
@@ -288,6 +293,8 @@ body.busy #dock{pointer-events:none;opacity:.55}
       <button id="zOut" title="축소 (-)">－</button>
       <button id="zFit" title="맞춤 (0)"><span id="zPct">100%</span></button>
       <button id="zIn" title="확대 (+)">＋</button>
+      <span class="dsep"></span>
+      <button id="dockMove" title="연필 버튼 위치 옮기기">✥ 버튼 옮기기</button>
     </div>
   </div>
   <div id="fsBar">
@@ -486,6 +493,7 @@ body.busy #dock{pointer-events:none;opacity:.55}
 </div>
 <div id="cfm" hidden><div class="card" role="dialog" aria-modal="true"><p id="cfmT"></p><div class="acts"><button id="cfmN">취소</button><button id="cfmY" class="on">확인</button></div></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
+<div id="dkPick" hidden><div>✥ 연필 버튼을 둘 곳을 <b>누르거나 끌어서</b> 정하세요<br><small>손을 떼면 그 자리에 고정돼요 · 바깥 [취소]로 그만두기</small><br><button id="dkPickX">취소</button></div></div>
 <div id="pickBox" hidden role="dialog" aria-label="분석할 사람 선택">
   <div id="pickTxt"></div>
   <div id="pickWrap"><canvas id="pickCv"></canvas></div>
@@ -497,7 +505,7 @@ body.busy #dock{pointer-events:none;opacity:.55}
 </div>
 <div id="help" hidden role="dialog" aria-label="단축키">
   <div class="card">
-    <h3>⌨ 단축키</h3>
+    <h3>⌨ 단축키 <small style="font-weight:400;color:var(--sub);font-size:11px">· 버전 10-08 16시</small></h3>
     <table>
       <tr><td><kbd>Space</kbd></td><td>재생 / 일시정지 (프리즈 중에는 계속 재생)</td></tr>
       <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>1프레임 이동 (<kbd>Shift</kbd> 누르면 10프레임)</td></tr>
@@ -3903,6 +3911,16 @@ window.addEventListener('resize',loadDockPos);
     if(DK.drag){ e.preventDefault(); placeDock(e.clientX-P.ox,e.clientY-P.oy,false); } });
   const up=e=>{ if(e.pointerType!=='mouse') return; const P=DK.press; if(!P) return; clearTimeout(P.t); DK.press=null; if(DK.drag) endDrag(); };
   tg.addEventListener('pointerup',up); tg.addEventListener('pointercancel',up);
+  const pick=$('dkPick'); let pk=false;
+  const pickAt=(x,y)=>placeDock(x-DKS/2,y-DKS/2,false);
+  $('dockMove').onclick=()=>{ pick.hidden=false; document.body.classList.add('dkpick'); tg.classList.add('drag'); };
+  const pickEnd=save=>{ pick.hidden=true; document.body.classList.remove('dkpick'); tg.classList.remove('drag'); pk=false; if(save&&DK.pos){ placeDock(DK.pos.x,DK.pos.y,true); toast('✔ 연필 버튼 위치를 바꿨어요'); } };
+  $('dkPickX').onclick=e=>{ e.stopPropagation(); pickEnd(false); let has=false; try{ has=!!localStorage.getItem(DKKEY); }catch(_){}
+    if(has) loadDockPos(); else { const d=$('dock'); ['left','right','top','transform','maxWidth'].forEach(k=>d.style[k]=''); d.classList.remove('rev'); d.style.removeProperty('--dmw'); } };
+  pick.addEventListener('pointerdown',e=>{ if(e.target.closest('button')) return; e.preventDefault(); pk=true; try{ pick.setPointerCapture(e.pointerId); }catch(_){} pickAt(e.clientX,e.clientY); });
+  pick.addEventListener('pointermove',e=>{ if(pk){ e.preventDefault(); pickAt(e.clientX,e.clientY); } });
+  pick.addEventListener('pointerup',e=>{ if(pk) pickEnd(true); });
+  pick.addEventListener('contextmenu',e=>e.preventDefault());
   loadDockPos(); }
 [...$('dockStrip').querySelectorAll('button,select,input,.dsep')].forEach((el,i)=>el.style.setProperty('--i',i));
 
