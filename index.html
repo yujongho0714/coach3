@@ -3710,8 +3710,7 @@ async function analyzeMulti(el,name,p0,p1,rng,P){ // 고른 사람들을 영상 
       offs.push({x:o.x,y:o.y});
       if(i%2===0){ const q=(i-i0)/Math.max(1,i1-i0); setAna(`${name} 분석 중 ${Math.round(q*100)}% · ${P.sel.length}명 · ${QN[kind]}`,p0+(p1-p0)*q); }
     }
-  }finally{ try{lm.close()}catch(e){} try{lmImg&&lmImg.close()}catch(e){} try{hl&&hl.close()}catch(e){} }
-  if(hl){ out.hands=hands; }
+  }finally{ try{lm.close()}catch(e){} try{lmImg&&lmImg.close()}catch(e){} }
   // 장면마다 나온 사람들을 '누구인지' 이어 붙이기 (기준 장면에서 앞·뒤로, 가까운 사람끼리)
   setAna('사람별로 나눠 맞추는 중…',p1);
   const rI=Math.round(P.ref.t*AFPS), refIdx=Math.max(i0,Math.min(i1,rI)), far=rI!==refIdx;
