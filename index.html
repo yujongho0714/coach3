@@ -39,6 +39,11 @@ small{color:var(--mut)}
 .t-pen{background:#c2641f}.t-line{background:#2f77c4}.t-arrow{background:#8a4fc4}.t-angle{background:#1f9c76}.t-text{background:#c43f86}
 .ph{position:absolute;top:0;bottom:0;width:2px;background:#ff3b30;pointer-events:none;z-index:3}
 .pick{padding:8px;background:#101316;border:1px solid var(--ac);border-radius:6px;display:none;flex-wrap:wrap;gap:6px;align-items:center}
+.trim{position:relative;flex:1 1 100%;height:26px;background:#101316;border:1px solid var(--line);border-radius:6px;touch-action:none;margin:2px 6px}
+.trim .rg{position:absolute;top:0;bottom:0;background:#ffb30040}
+.hd{position:absolute;top:-2px;bottom:-2px;width:14px;margin-left:-7px;background:var(--ac);border-radius:4px;cursor:ew-resize;z-index:2;touch-action:none}
+.trow{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px}
+.trow input{width:80px;background:#12161a;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px}
 </style>
 </head>
 <body>
@@ -90,12 +95,15 @@ small{color:var(--mut)}
 const $=s=>document.querySelector(s);
 const A=$('#vA'),B=$('#vB'),cv=$('#ov'),cx=cv.getContext('2d'),tl=$('#tl');
 const V={A,B};
+const T={A:{i:0,o:0},B:{i:0,o:0}};
+const tr=v=>v===A?T.A:T.B;
 let fps=30,rate=.5,anns=[],tool='pen',dash=false,cur=null,pend=[],selSet=new Set(),multi=false,cnt={},drawing=false,t0=0,act=A,exporting=false;
 const NM={pen:'펜',line:'직선',arrow:'화살표',angle:'각도기',text:'텍스트'};
 
-const cl=(t,v)=>Math.max(0,Math.min(isFinite(v.duration)?v.duration:t,t));
+const cl=(t,v)=>{ if(!isFinite(v.duration))return t; const r=tr(v); return Math.max(r.i,Math.min(r.o,t)); };
 function step(v,n){ v.pause(); v.currentTime=cl((Math.round(v.currentTime*fps)+n)/fps+.0005,v); }
-function toggle(v){ if(!v.src)return; v.paused?v.play():v.pause(); }
+function playFrom(v){ const r=tr(v); if(v.currentTime<r.i||v.currentTime>=r.o-.03) v.currentTime=r.i; v.play(); }
+function toggle(v){ if(!v.src)return; v.paused?playFrom(v):v.pause(); }
 
 /* 영상별 컨트롤 */
 for(const k of ['A','B']){
@@ -103,13 +111,20 @@ for(const k of ['A','B']){
   $('#bar'+k).innerHTML=`<button id="play${k}" class="go">재생</button>
    <button data-s="-10">−10f</button><button data-s="-1">−1f</button><button data-s="1">+1f</button><button data-s="10">+10f</button>
    <span class="t" id="tm${k}">0.000s · 0f</span>
-   <input type="range" class="full" id="sl${k}" min="0" max="1" step="0.001" value="0">`;
+   <input type="range" class="full" id="sl${k}" min="0" max="1" step="0.001" value="0">
+   <div class="trim" id="tr${k}"><i class="rg" id="rg${k}"></i><b class="hd" id="hs${k}"></b><b class="hd" id="he${k}"></b></div>
+   <div class="trow"><b>구간 자르기</b> 시작 <input type="number" step="0.01" min="0" id="ti${k}">초 ~ 끝 <input type="number" step="0.01" min="0" id="to${k}">초
+   <button id="bs${k}">현재→시작</button><button id="be${k}">현재→끝</button><button id="br${k}">전체</button><span class="t" id="tlen${k}"></span></div>`;
   $('#play'+k).onclick=()=>toggle(v);
   $('#bar'+k).querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>step(v,+b.dataset.s));
-  $('#sl'+k).oninput=e=>{ v.pause(); v.currentTime=+e.target.value; };
+  $('#sl'+k).oninput=e=>{ v.pause(); v.currentTime=cl(+e.target.value,v); };
+  $('#hs'+k).onpointerdown=e=>dragH(e,k,'i'); $('#he'+k).onpointerdown=e=>dragH(e,k,'o');
+  $('#ti'+k).onchange=e=>setTrim(k,'i',+e.target.value); $('#to'+k).onchange=e=>setTrim(k,'o',+e.target.value);
+  $('#bs'+k).onclick=()=>setTrim(k,'i',v.currentTime,false); $('#be'+k).onclick=()=>setTrim(k,'o',v.currentTime,false);
+  $('#br'+k).onclick=()=>{ if(!v.duration)return; T[k].i=0; T[k].o=v.duration; trUI(k); };
   $('#f'+k).onchange=e=>{ const f=e.target.files[0]; if(f){ v.src=URL.createObjectURL(f); v.load(); } };
   v.onloadedmetadata=()=>{
-    $('#sl'+k).max=v.duration; v.defaultPlaybackRate=v.playbackRate=rate;
+    $('#sl'+k).max=v.duration; T[k]={i:0,o:v.duration}; trUI(k); v.defaultPlaybackRate=v.playbackRate=rate;
     $('#w'+k).style.aspectRatio=v.videoWidth+'/'+v.videoHeight;
     if(k==='A'){ cv.width=v.videoWidth; cv.height=v.videoHeight; anns=[]; selSet.clear(); cnt={}; tlBuild(); }
   };
@@ -117,10 +132,31 @@ for(const k of ['A','B']){
   $('#w'+k).addEventListener('click',()=>{ if(!$('#w'+k).classList.contains('draw')) toggle(v); });
 }
 
+/* 구간 자르기 */
+function trUI(k){
+  const v=V[k], r=T[k], d=v.duration; if(!d)return;
+  $('#rg'+k).style.left=r.i/d*100+'%'; $('#rg'+k).style.width=(r.o-r.i)/d*100+'%';
+  $('#hs'+k).style.left=r.i/d*100+'%'; $('#he'+k).style.left=r.o/d*100+'%';
+  if(document.activeElement.id!=='ti'+k) $('#ti'+k).value=r.i.toFixed(2);
+  if(document.activeElement.id!=='to'+k) $('#to'+k).value=r.o.toFixed(2);
+  $('#tlen'+k).textContent='길이 '+(r.o-r.i).toFixed(2)+'초';
+}
+function setTrim(k,w,val,show=true){
+  const v=V[k], r=T[k], d=v.duration; if(!d||!isFinite(val))return;
+  if(w==='i') r.i=Math.max(0,Math.min(val,r.o-.1)); else r.o=Math.min(d,Math.max(val,r.i+.1));
+  v.pause(); if(show) v.currentTime=w==='i'?r.i:r.o; trUI(k);
+}
+function dragH(e,k,w){
+  e.preventDefault(); e.stopPropagation(); const box=$('#tr'+k), h=e.target; h.setPointerCapture(e.pointerId);
+  const mv=ev=>{ const rc=box.getBoundingClientRect(); setTrim(k,w,(ev.clientX-rc.left)/rc.width*V[k].duration); };
+  const up=()=>{ h.removeEventListener('pointermove',mv); h.removeEventListener('pointerup',up); };
+  h.addEventListener('pointermove',mv); h.addEventListener('pointerup',up);
+}
+
 /* 함께 조작 */
 $('#gplay').onclick=()=>{
   const vs=[A,B].filter(v=>v.src); if(!vs.length)return;
-  vs.every(v=>v.paused)?vs.forEach(v=>v.play()):vs.forEach(v=>v.pause());
+  vs.every(v=>v.paused)?vs.forEach(playFrom):vs.forEach(v=>v.pause());
 };
 document.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>[A,B].filter(v=>v.src).forEach(v=>step(v,+b.dataset.g)));
 $('#rate').onchange=e=>{ rate=+e.target.value; [A,B].forEach(v=>v.defaultPlaybackRate=v.playbackRate=rate); };
@@ -286,6 +322,7 @@ function fitTo(len,m){
       if(document.activeElement!==s) s.value=v.currentTime;
       $('#tm'+k).textContent=v.currentTime.toFixed(3)+'s · '+Math.round(v.currentTime*fps)+'f';
     }
+    if(!v.paused&&v.duration&&v.currentTime>=tr(v).o){ v.pause(); v.currentTime=tr(v).o; }
     $('#play'+k).textContent=v.paused?'재생':'정지';
   }
   $('#gplay').textContent=[A,B].some(v=>v.src&&!v.paused)?'함께 정지':'함께 재생';
@@ -305,7 +342,7 @@ $('#exp').onclick=async()=>{
   const rec=new MediaRecorder(stream,mt?{mimeType:mt,videoBitsPerSecond:8e6}:{});
   const chunks=[]; rec.ondataavailable=e=>e.data.size&&chunks.push(e.data);
   const prev=A.playbackRate; A.playbackRate=1;
-  A.currentTime=0; await new Promise(r=>A.addEventListener('seeked',r,{once:true}));
+  A.currentTime=T.A.i; await new Promise(r=>A.addEventListener('seeked',r,{once:true}));
   let run=true;
   rec.onstop=()=>{
     run=false; exporting=false; A.playbackRate=prev;
@@ -316,7 +353,7 @@ $('#exp').onclick=async()=>{
   A.addEventListener('ended',()=>rec.state!=='inactive'&&rec.stop(),{once:true});
   rec.start(); A.play();
   $('#st').textContent='저장 중… 영상이 끝날 때까지 이 탭을 켜두세요.';
-  (function f(){ if(!run)return; x.drawImage(A,0,0,c.width,c.height); drawAnn(x,A.currentTime,c); requestAnimationFrame(f); })();
+  (function f(){ if(!run)return; if(A.currentTime>=T.A.o-.02&&rec.state!=='inactive'){ rec.stop(); return; } x.drawImage(A,0,0,c.width,c.height); drawAnn(x,A.currentTime,c); requestAnimationFrame(f); })();
 };
 </script>
 </body>
