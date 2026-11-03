@@ -73,6 +73,18 @@ small{color:var(--mut)}
   </div>
 </div>
 
+<div class="gbar" style="border-top:2px solid var(--ac);background:#1a1f24">
+  <b style="color:var(--ac)">① 첫 동작 연동</b>
+  <button id="linkBtn" class="go">첫 동작 맞춤 완료 → 연동 시작</button>
+  <small id="linkMsg" style="color:#7fe0b5"></small>
+  <small style="flex:1 1 100%">내 영상·선수 영상을 각각 <b>첫 동작 장면</b>에 맞춘 뒤 이 버튼을 누르세요. 그 뒤로는 내 영상을 움직이면(재생·막대·프레임 이동) 선수 영상이 같이 움직여요. 연동 중에 선수 영상 쪽 막대나 ±프레임을 움직이면 맞춘 위치가 미세 조정돼요.</small>
+  <b style="color:var(--ac)">② 정밀 분석</b>
+  <select id="anaQ"><option value="15" selected>보통 (초당 15장)</option><option value="30">정밀 (초당 30장, 느림)</option></select>
+  <button id="anaBtn" class="go">정밀 분석으로 동작 맞추기</button>
+  <small id="anaMsg" style="color:#7fe0b5"></small>
+  <small style="flex:1 1 100%">첫 동작 맞춘 지점부터 두 영상의 움직임을 장면마다 비교해서, 같은 동작(준비 → 막기 → 찌르기 …)이 서로 맞도록 맞춤점을 자동으로 만들어요. 촬영 각도가 비슷하고(고정 카메라) 선수·나 모두 화면에 크게 나올수록 정확해요.</small>
+</div>
+
 <div class="gbar">
   <b>함께 조작</b>
   <button id="gplay" class="go">함께 재생</button>
@@ -132,14 +144,14 @@ let expStop=null,lineEdit=false,fps=30,rate=.5,anns=[],tool='pen',dash=false,cur
 const NM={pen:'펜',line:'직선',arrow:'화살표',angle:'각도기',text:'텍스트'};
 
 const cl=(t,v)=>{ if(!isFinite(v.duration))return t; const r=tr(v); return Math.max(r.i,Math.min(r.o,t)); };
-function step(v,n){ if(exporting)return; v.pause(); v.currentTime=cl((Math.round(v.currentTime*fps)+n)/fps+.0005,v); }
+function step(v,n){ if(exporting)return; v.pause(); const t=cl((Math.round(v.currentTime*fps)+n)/fps+.0005,v); v.currentTime=t; if(v===B) nudgeB(t); }
 function msg(s){ $('#msg').textContent=s; }
 function playFrom(v){
   if(exporting)return;
   const r=tr(v); if(v.currentTime<r.i||v.currentTime>=r.o-.03) v.currentTime=r.i;
   const p=v.play(); if(p&&p.catch) p.catch(e=>msg('재생이 안 돼요 ('+((e&&e.name)||'오류')+'). 영상을 다시 선택해 보세요.'));
 }
-function toggle(v){ if(!v.src||exporting)return; v.paused?playFrom(v):v.pause(); }
+function toggle(v){ if(!v.src||exporting)return; if(v===B&&linkOn&&syncActive()) v=A; v.paused?playFrom(v):v.pause(); }
 
 /* 영상 불러오기 / 선수 영상 창 열기·닫기 */
 function loadFile(k,f){
@@ -209,7 +221,7 @@ async function autoStart(k,force){
 $('#autoNow').onclick=()=>{ if(exporting)return; ['A','B'].forEach(k=>{ if(V[k].src&&V[k].duration){ T[k].i=0; autoStart(k,true); } }); };
 
 /* 동작 맞춤점: 내 영상 시간(a) ↔ 선수 영상 시간(b). 맞춤점 사이에서 선수 영상 속도를 자동 조절 */
-let syncPts=[], together=false;
+let syncPts=[], together=false, linkOn=false, lastTb=NaN;
 function mapB(ta){
   const P=syncPts; if(!P.length) return null;
   if(ta<=P[0].a) return P[0].b-(P[0].a-ta);
@@ -220,6 +232,12 @@ function slopeAt(ta){ const P=syncPts; for(let i=1;i<P.length;i++) if(ta>=P[i-1]
 const syncActive=()=>syncPts.length&&A.src&&B.src&&$('#syncOn').checked;
 function spUI(){
   const box=$('#spList'); box.innerHTML='';
+  if(syncPts.length>10){
+    const c=document.createElement('span'); c.className='t'; c.style.cssText='background:#101316;border:1px solid var(--line);border-radius:6px;padding:4px 8px';
+    const rs=[]; for(let i=1;i<syncPts.length;i++) rs.push((syncPts[i].b-syncPts[i-1].b)/(syncPts[i].a-syncPts[i-1].a));
+    c.textContent='자동 맞춤점 '+syncPts.length+'개 · 내 '+syncPts[0].a.toFixed(2)+'s ~ '+syncPts[syncPts.length-1].a.toFixed(2)+'s 구간 · 선수 속도 ×'+Math.min(...rs).toFixed(2)+' ~ ×'+Math.max(...rs).toFixed(2);
+    box.appendChild(c); return;
+  }
   syncPts.forEach((p,i)=>{
     const c=document.createElement('span'); c.className='t'; c.style.cssText='background:#101316;border:1px solid var(--line);border-radius:6px;padding:4px 8px';
     let txt=(i+1)+'. 내 '+p.a.toFixed(2)+'s ↔ 선수 '+p.b.toFixed(2)+'s';
@@ -229,7 +247,7 @@ function spUI(){
     c.appendChild(x); box.appendChild(c);
   });
 }
-function spClear(){ syncPts=[]; together=false; if(B.src) B.playbackRate=rate; spUI(); }
+function spClear(){ syncPts=[]; together=false; linkOn=false; lastTb=NaN; anaId++; if(B.src) B.playbackRate=rate; spUI(); linkUI(); }
 $('#spClr').onclick=()=>{ spClear(); $('#spMsg').textContent=''; };
 $('#spAdd').onclick=()=>{
   if(exporting) return;
@@ -256,7 +274,7 @@ for(const k of ['A','B']){
   $('#zw'+k).addEventListener('wheel',e=>{ if(!(e.ctrlKey||e.metaKey))return; e.preventDefault(); const r=$('#zw'+k).getBoundingClientRect(); setZoom(k,zm[k]*(e.deltaY<0?1.25:.8),e.clientX-r.left); },{passive:false});
   $('#play'+k).onclick=()=>toggle(v);
   $('#bar'+k).querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>step(v,+b.dataset.s));
-  $('#sl'+k).oninput=e=>{ if(exporting)return; v.pause(); v.currentTime=cl(+e.target.value,v); };
+  $('#sl'+k).oninput=e=>{ if(exporting)return; v.pause(); const t=cl(+e.target.value,v); v.currentTime=t; if(k==='B') nudgeB(t); };
   $('#hs'+k).onpointerdown=e=>dragH(e,k,'i'); $('#he'+k).onpointerdown=e=>dragH(e,k,'o');
   $('#ti'+k).onchange=e=>setTrim(k,'i',+e.target.value); $('#to'+k).onchange=e=>setTrim(k,'o',+e.target.value);
   $('#bs'+k).onclick=()=>setTrim(k,'i',v.currentTime,false); $('#be'+k).onclick=()=>setTrim(k,'o',v.currentTime,false);
@@ -538,14 +556,25 @@ addEventListener('pointercancel',()=>{ sd.A=sd.B=false; });
       }
       setTxt('#play'+k,v.paused?'재생':'정지');
     }
+    if(!exporting&&linkOn&&syncActive()){
+      const ta=A.currentTime, tb=mapB(ta), rB=tr(B);
+      if(!A.paused){
+        together=true;
+        if(B.paused&&!B.seeking&&tb>=rB.i-.001&&tb<rB.o-.03){ B.currentTime=cl(tb,B); const pr=B.play(); if(pr&&pr.catch) pr.catch(()=>{}); }
+      }else if(!together){
+        if(!B.paused) B.pause();
+        if(Math.abs(B.playbackRate-rate)>.001) B.playbackRate=rate;
+        if(!B.seeking&&!(Math.abs(tb-lastTb)<=1e-4)&&isFinite(B.duration)){ lastTb=tb; B.currentTime=cl(tb,B); }
+      }
+    }
     if(together){
-      if(A.paused||!B.src){ together=false; if(B.src){ B.pause(); B.playbackRate=rate; } }
+      if(A.paused||!B.src){ together=false; lastTb=NaN; if(B.src){ B.pause(); B.playbackRate=rate; } }
       else{
         const ta=A.currentTime, tb=mapB(ta);
         if(tb!=null){
           const want=Math.max(.0625,Math.min(16,rate*slopeAt(ta)));
           if(Math.abs(B.playbackRate-want)>.005) B.playbackRate=want;
-          if(!B.paused&&Math.abs(B.currentTime-tb)>.15&&tb>=0&&tb<=B.duration) B.currentTime=cl(tb,B);
+          if(!B.paused&&Math.abs(B.currentTime-tb)>(linkOn?.05:.15)&&tb>=0&&tb<=B.duration) B.currentTime=cl(tb,B);
         }
       }
     }
@@ -555,6 +584,142 @@ addEventListener('pointercancel',()=>{ sd.A=sd.B=false; });
   }catch(err){ console.error(err); }
   requestAnimationFrame(loop);
 })();
+
+
+/* ===== 첫 동작 연동 + 정밀 분석 ===== */
+function linkUI(){
+  const b=$('#linkBtn'); if(!b) return;
+  b.textContent=linkOn?'연동 해제':'첫 동작 맞춤 완료 → 연동 시작';
+  b.classList.toggle('go',!linkOn); b.classList.toggle('on',linkOn);
+  $('#pA').style.borderColor=$('#pB').style.borderColor=linkOn?'var(--me)':'';
+  $('#linkMsg').textContent=linkOn?'연동 중 — 내 영상을 움직이면 선수 영상이 같이 움직여요':'';
+}
+function nudgeB(t){
+  if(!(linkOn&&syncActive())) return;
+  const ta=A.currentTime, d=t-mapB(ta);
+  if(Math.abs(d)<1e-6) return;
+  syncPts.forEach(p=>p.b+=d); lastTb=mapB(ta); spUI();
+  $('#linkMsg').textContent='연동 중 — 선수 영상 위치를 미세 조정했어요 ('+(d>0?'+':'')+d.toFixed(3)+'초)';
+}
+$('#linkBtn').onclick=()=>{
+  if(exporting) return;
+  if(linkOn){ linkOn=false; together=false; lastTb=NaN; if(B.src){ B.pause(); B.playbackRate=rate; } linkUI(); return; }
+  if(!A.duration||!B.duration){ $('#linkMsg').textContent='내 영상과 선수 영상을 둘 다 선택하세요.'; return; }
+  A.pause(); B.pause(); anaId++;
+  syncPts=[{a:A.currentTime,b:B.currentTime}]; $('#syncOn').checked=true; $('#spMsg').textContent='';
+  linkOn=true; together=false; lastTb=NaN; spUI(); linkUI();
+};
+
+/* 동작 비교용 특징 추출: 숨겨둔 영상을 일정 간격으로 훑어서, 첫 장면과 달라진 부분의 양·위치·퍼짐과 움직임 크기를 잼 */
+let anaId=0;
+async function grabSeq(k,t0,dt,n,id,onp){
+  const hv=document.createElement('video'); hv.muted=true; hv.playsInline=true; hv.preload='auto';
+  try{
+    hv.src=V[k].src;
+    await new Promise((ok,no)=>{ hv.onloadeddata=ok; hv.onerror=no; setTimeout(no,8000); });
+    const W=80, H=Math.max(8,Math.round(80*hv.videoHeight/hv.videoWidth)), N=W*H, c=document.createElement('canvas'); c.width=W; c.height=H;
+    const g=c.getContext('2d',{willReadFrequently:true});
+    const ref=new Float32Array(N), prev=new Float32Array(N), cur=new Float32Array(N), F=[]; let mR=0, mP=0;
+    for(let i=0;i<n;i++){
+      if(anaId!==id) return null;
+      await seekTo(hv,Math.min(t0+i*dt,Math.max(0,hv.duration-.001)));
+      g.drawImage(hv,0,0,W,H); const d=g.getImageData(0,0,W,H).data; let sum=0;
+      for(let p=0;p<N;p++){ const y=(d[p*4]*3+d[p*4+1]*6+d[p*4+2])/10; cur[p]=y; sum+=y; }
+      const m=sum/N; if(i===0){ ref.set(cur); prev.set(cur); mR=mP=m; }
+      let nC=0,sx=0,sy=0,sxx=0,syy=0,mo=0;
+      for(let p=0;p<N;p++){
+        if(Math.abs(cur[p]-ref[p]-(m-mR))>22){ const x=p%W, y=(p/W)|0; nC++; sx+=x; sy+=y; sxx+=x*x; syy+=y*y; }
+        mo+=Math.abs(cur[p]-prev[p]-(m-mP));
+      }
+      let cx=.5,cy=.5,vx=0,vy=0;
+      if(nC>3){ const ax=sx/nC, ay=sy/nC; cx=ax/W; cy=ay/H; vx=Math.sqrt(Math.max(0,sxx/nC-ax*ax))/W; vy=Math.sqrt(Math.max(0,syy/nC-ay*ay))/H; }
+      F.push([nC/N,cx,cy,vx,vy,mo/N/255]); prev.set(cur); mP=m;
+      onp(1);
+    }
+    return F;
+  }catch(e){ return null; }
+  finally{ hv.removeAttribute('src'); hv.load(); }
+}
+const FW=[1.2,.7,.7,.7,.7,1.2];
+function featNorm(F){
+  const n=F.length, d=FW.length;
+  const S=F.map((_,i)=>{ const o=new Array(d).fill(0); let c=0; for(let j=Math.max(0,i-1);j<=Math.min(n-1,i+1);j++){ for(let q=0;q<d;q++) o[q]+=F[j][q]; c++; } return o.map(x=>x/c); });
+  for(let q=0;q<d;q++){
+    let m=0; S.forEach(r=>m+=r[q]); m/=n; let v=0; S.forEach(r=>v+=(r[q]-m)*(r[q]-m)); const sd=Math.sqrt(v/n);
+    S.forEach(r=>{ r[q]=sd<1e-3?0:(r[q]-m)/sd*FW[q]; });
+  }
+  return S;
+}
+/* DTW: 두 특징열을 (0,0)에서 시작해 가장 비슷하게 겹치는 경로를 찾음. 끝은 열어둠(영상 길이가 달라도 됨) */
+function dtw(a,b,fps){
+  const n=a.length, m=b.length, INF=1e18, pen=.35, R=2.5, w=Math.round(fps*1.2);
+  const D=new Float64Array(n*m).fill(INF), M=new Uint8Array(n*m), dist=(x,y)=>{ let s=0; for(let q=0;q<x.length;q++){ const t=x[q]-y[q]; s+=t*t; } return Math.sqrt(s); };
+  for(let i=0;i<n;i++){
+    const lo=Math.max(0,Math.floor(i/R)-w), hi=Math.min(m-1,Math.ceil(i*R)+w);
+    for(let j=lo;j<=hi;j++){
+      const d=dist(a[i],b[j]); let best=INF, mv=0;
+      if(i===0&&j===0){ best=0; }
+      else{
+        if(i>0&&j>0&&D[(i-1)*m+j-1]<best){ best=D[(i-1)*m+j-1]; mv=0; }
+        if(i>0&&D[(i-1)*m+j]+pen<best){ best=D[(i-1)*m+j]+pen; mv=1; }
+        if(j>0&&D[i*m+j-1]+pen<best){ best=D[i*m+j-1]+pen; mv=2; }
+      }
+      if(best>=INF) continue;
+      D[i*m+j]=best+d; M[i*m+j]=mv;
+    }
+  }
+  let bi=-1,bj=-1,bc=INF;
+  for(let j=0;j<m;j++){ const v=D[(n-1)*m+j]; if(v<INF){ const c=v/(n+j); if(c<bc){ bc=c; bi=n-1; bj=j; } } }
+  for(let i=Math.floor((n-1)*.5);i<n;i++){ const v=D[i*m+m-1]; if(v<INF){ const c=v/(i+m); if(c<bc){ bc=c; bi=i; bj=m-1; } } }
+  if(bi<0) return null;
+  const path=[]; let i=bi,j=bj;
+  while(true){ path.push([i,j]); if(i===0&&j===0) break; const mv=M[i*m+j]; if(mv===0){i--;j--;} else if(mv===1) i--; else j--; }
+  path.reverse();
+  let sd=0; path.forEach(([x,y])=>sd+=dist(a[x],b[y]));
+  return {path, avg:sd/path.length};
+}
+/* 경로 → 맞춤점(0.5초 간격 정도): 내 시간 ↔ 선수 시간 */
+function pathToPts(path,a0,b0,dt){
+  const iEnd=path[path.length-1][0], sum=new Array(iEnd+1).fill(0), cnt=new Array(iEnd+1).fill(0);
+  path.forEach(([i,j])=>{ sum[i]+=j; cnt[i]++; });
+  let bj=sum.map((s,i)=>s/cnt[i]);
+  bj=bj.map((_,i)=>{ let s=0,c=0; for(let k=Math.max(0,i-2);k<=Math.min(iEnd,i+2);k++){ s+=bj[k]; c++; } return s/c; });
+  bj[0]=0; for(let i=1;i<=iEnd;i++) if(bj[i]<bj[i-1]) bj[i]=bj[i-1];
+  const K=Math.max(1,Math.round(.5/dt)), pts=[{a:a0,b:b0}];
+  const push=i=>{ const a=a0+i*dt, b=b0+bj[i]*dt, L=pts[pts.length-1]; if(a>L.a+.05&&b>L.b+.02) pts.push({a,b}); };
+  for(let i=K;i<iEnd;i+=K) push(i); if(iEnd>0) push(iEnd);
+  return pts;
+}
+let anaBusy=false;
+$('#anaBtn').onclick=async()=>{
+  if(anaBusy){ anaId++; return; }
+  if(exporting) return;
+  if(!A.duration||!B.duration){ $('#anaMsg').textContent='내 영상과 선수 영상을 둘 다 선택하세요.'; return; }
+  A.pause(); B.pause(); together=false;
+  let a0,b0;
+  if(linkOn&&syncPts.length){ a0=syncPts[0].a; b0=syncPts[0].b; } else { a0=A.currentTime; b0=B.currentTime; }
+  const afps=+$('#anaQ').value, dt=1/afps, maxN=600;
+  const lenA=Math.min(T.A.o-a0,maxN*dt), lenB=Math.min(T.B.o-b0,Math.min(lenA*2.5,maxN*2.5*dt));
+  if(lenA<.5||lenB<.5){ $('#anaMsg').textContent='첫 동작 맞춘 지점 뒤로 영상이 너무 짧아요(0.5초 이상 필요).'; return; }
+  const nA=Math.floor(lenA/dt)+1, nB=Math.floor(lenB/dt)+1, id=++anaId; let done=0;
+  anaBusy=true; $('#anaBtn').textContent='분석 취소'; $('#anaBtn').classList.remove('go'); $('#anaBtn').classList.add('on');
+  const onp=()=>{ done++; if(done%5===0) $('#anaMsg').textContent='분석 중… '+Math.round(done/(nA+nB)*100)+'% (이 탭을 켜두세요)'; };
+  try{
+    $('#anaMsg').textContent='분석 중… 0% (이 탭을 켜두세요)';
+    const [FA,FB]=await Promise.all([grabSeq('A',a0,dt,nA,id,onp),grabSeq('B',b0,dt,nB,id,onp)]);
+    if(anaId!==id){ $('#anaMsg').textContent='분석을 취소했어요.'; return; }
+    if(!FA||!FB||FA.length<4||FB.length<4){ $('#anaMsg').textContent='영상을 분석하지 못했어요. 영상을 다시 선택해 보세요.'; return; }
+    const r=dtw(featNorm(FA),featNorm(FB),afps);
+    if(!r){ $('#anaMsg').textContent='동작이 서로 맞는 경로를 찾지 못했어요. 첫 동작을 더 정확히 맞춘 뒤 다시 해 보세요.'; return; }
+    const pts=pathToPts(r.path,a0,b0,dt);
+    syncPts=pts; $('#syncOn').checked=true; linkOn=true; together=false; lastTb=NaN; spUI(); linkUI();
+    const sc=Math.round(100/(1+r.avg)), end=pts[pts.length-1];
+    $('#anaMsg').textContent='분석 완료 — 맞춤점 '+pts.length+'개 · 내 영상 '+a0.toFixed(2)+'~'+end.a.toFixed(2)+'초 구간 · 일치도(참고) '+sc+'%. 이제 내 영상을 움직여 보세요. 어긋나면 선수 영상 막대로 미세 조정하거나 맞춤점을 추가하세요.';
+    A.currentTime=a0;
+  }catch(err){ console.error(err); $('#anaMsg').textContent='분석에 실패했어요 ('+((err&&err.message)||err)+')'; }
+  finally{ anaBusy=false; $('#anaBtn').textContent='정밀 분석으로 동작 맞추기'; $('#anaBtn').classList.add('go'); $('#anaBtn').classList.remove('on'); }
+};
+linkUI();
 
 /* 내보내기: 내 영상 + 그림만 (선수 영상은 포함 안 됨) */
 $('#exp').onclick=async()=>{
