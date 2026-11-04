@@ -117,6 +117,9 @@ small{color:var(--mut)}
   <span>굵기</span><input type="range" id="wid" min="1" max="30" value="5" style="width:110px;accent-color:var(--ac)"><span class="t" id="widv" style="min-width:20px">5</span>
   <span>진하기</span><input type="range" id="opa" min="10" max="100" value="100" style="width:90px;accent-color:var(--ac)"><span class="t" id="opav" style="min-width:34px">100%</span>
   <span>표시 시간</span><select id="hold"><option value="1">1초</option><option value="2">2초</option><option value="3" selected>3초</option><option value="5">5초</option><option value="8">8초</option><option value="9999">끝까지</option></select>
+  <label style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="fzOn" checked>재생 중 화면 멈춤(프리즈)</label>
+  <select id="fzt"><option value="1">1초</option><option value="2">2초</option><option value="3" selected>3초</option><option value="5">5초</option><option value="8">8초</option></select>
+  <label style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="anOn" checked>서서히 그리기(애니메이션)</label>
   <button id="dm">그리기 끄기</button>
   <button id="del">선택 삭제</button><button id="clr">전체 지우기</button>
 </div>
@@ -130,7 +133,7 @@ small{color:var(--mut)}
 </div>
 <div class="gbar">
   <button id="exp" class="go">내 영상만 저장</button>
-  <small id="st">펜·직선·화살표는 그린 방향을 따라 서서히 그려져요. 각도기는 점 3개(끝-꼭짓점-끝)를 차례로 누르세요. 재생막대 아래 주황 막대는 끌어서 이동, 양 끝을 끌어서 길이 조절해요.</small>
+  <small id="st">펜·직선·화살표는 '서서히 그리기'를 켜면 그린 속도·방향 그대로 다시 그려지고, 끄면 바로 나타나요. '재생 중 화면 멈춤'을 켜면 재생하다 그린 장면에서 영상이 멈췄다가 이어져요(저장한 영상에도 반영). 각도기는 점 3개(끝-꼭짓점-끝)를 차례로 누르세요. 재생막대 아래 주황 막대는 끌어서 이동, 양 끝을 끌어서 길이 조절해요.</small>
 </div>
 
 <script>
@@ -140,6 +143,7 @@ const V={A,B};
 const T={A:{i:0,o:0},B:{i:0,o:0}};
 const tr=v=>v===A?T.A:T.B;
 const zm={A:1,B:1};
+let fzHold=null; const fzDone=new Set();
 let expStop=null,lineEdit=false,fps=30,rate=.5,anns=[],tool='pen',dash=false,cur=null,pend=[],selSet=new Set(),multi=false,cnt={},textBusy=false,lastTextT=0,drawing=false,t0=0,act=A,exporting=false;
 const NM={pen:'펜',line:'직선',arrow:'화살표',angle:'각도기',text:'텍스트'};
 
@@ -389,11 +393,21 @@ function drawOne(x,a,p,k){
   }
   x.restore();
 }
+function ptFrac(pt,l){
+  if(!pt||!pt.length) return 1;
+  if(l<=pt[0][0]) return pt[0][1];
+  for(let i=1;i<pt.length;i++){ if(l<=pt[i][0]){ const q=pt[i-1], r=pt[i], d=r[0]-q[0]; return d<=0?r[1]:q[1]+(r[1]-q[1])*(l-q[0])/d; } }
+  return 1;
+}
 function drawAnn(x,t,c){
   const k=c.width/800;
   for(const a of anns){
     if(t<a.s-.05||t>a.s+a.d) continue;
-    drawOne(x,a,Math.max(0,Math.min(1,(t-a.s)/Math.min(a.rev,a.d))),k);
+    let p;
+    if(a.an===false) p=1;
+    else if(a.fz>0){ if(fzHold&&fzHold.a===a){ const l=(performance.now()-fzHold.start)/1000; p=a.pt?ptFrac(a.pt,l):Math.max(0,Math.min(1,l/a.rev)); } else p=1; }
+    else p=a.pt?ptFrac(a.pt,t-a.s):Math.max(0,Math.min(1,(t-a.s)/Math.min(a.rev,a.d)));
+    drawOne(x,a,p,k);
   }
 }
 let cleared=false;
@@ -411,7 +425,8 @@ function redraw(){
 function pos(e){ const r=cv.getBoundingClientRect(); return [(e.clientX-r.left)/r.width*cv.width,(e.clientY-r.top)/r.height*cv.height]; }
 function addAnn(o){
   const dur=A.duration||0, s=A.currentTime, h=+$('#hold').value;
-  Object.assign(o,{s,d:Math.max(.3,Math.min(h,dur-s)),c:$('#col').value,w:+$('#wid').value,op:+$('#opa').value/100,dash});
+  Object.assign(o,{s,d:Math.max(.3,Math.min(h,dur-s)),c:$('#col').value,w:+$('#wid').value,op:+$('#opa').value/100,dash,an:$('#anOn').checked,fz:$('#fzOn').checked?+$('#fzt').value:0});
+  if(o.pt) o.d=Math.max(o.d,Math.min(o.rev,Math.max(.3,dur-s)));
   cnt[o.type]=(cnt[o.type]||0)+1; o.nm=NM[o.type]+' '+cnt[o.type];
   if(o.type==='text'){ o.fs=+$('#tfs').value; o.fw=+$('#tfw').value; o.tc=$('#tco').value; }
   lineEdit=false; anns.push(o); selSet=new Set([o]); tlBuild(); tl.scrollTop=tl.scrollHeight; redraw();
@@ -419,7 +434,7 @@ function addAnn(o){
 cv.onpointerdown=e=>{
   if(exporting)return;
   if(!A.duration){ msg('먼저 내 영상을 선택하세요.'); return; }
-  A.pause(); const p=pos(e);
+  A.pause(); fzHold=null; if(B.src) B.pause(); const p=pos(e);
   if(tool==='text'){
     if(textBusy)return; textBusy=true;
     const tx=prompt('영상에 표시할 글자');
@@ -429,13 +444,27 @@ cv.onpointerdown=e=>{
   }
   if(tool==='angle'){ pend.push(p); if(pend.length===3){ addAnn({type:'angle',p:pend,rev:1}); pend=[]; } redraw(); return; }
   drawing=true; t0=performance.now(); cv.setPointerCapture(e.pointerId);
-  cur={type:tool,p:tool==='pen'?[p]:[p,p],c:$('#col').value,w:+$('#wid').value,op:+$('#opa').value/100,dash};
+  cur={type:tool,p:tool==='pen'?[p]:[p,p],c:$('#col').value,w:+$('#wid').value,op:+$('#opa').value/100,dash,tm:[0],tr:[[0,0]]};
 };
-cv.onpointermove=e=>{ if(!drawing)return; const p=pos(e); tool==='pen'?cur.p.push(p):cur.p[1]=p; redraw(); };
+cv.onpointermove=e=>{
+  if(!drawing)return; const p=pos(e), tt=(performance.now()-t0)/1000;
+  if(tool==='pen'){ cur.p.push(p); cur.tm.push(tt); }
+  else{ cur.p[1]=p; cur.tr.push([tt,Math.hypot(p[0]-cur.p[0][0],p[1]-cur.p[0][1])]); }
+  redraw();
+};
 cv.onpointerup=()=>{
   if(!drawing)return; drawing=false;
   const o=cur; cur=null; if(o.p.length<2||(o.type!=='pen'&&Math.hypot(o.p[1][0]-o.p[0][0],o.p[1][1]-o.p[0][1])<4)){ redraw(); return; }
-  addAnn({type:o.type,p:o.p,rev:Math.min(3,Math.max(.4,(performance.now()-t0)/1000))});
+  const tu=Math.max(.15,(performance.now()-t0)/1000); let pt;
+  if(o.type==='pen'){
+    const cum=[0]; for(let i=1;i<o.p.length;i++) cum.push(cum[i-1]+Math.hypot(o.p[i][0]-o.p[i-1][0],o.p[i][1]-o.p[i-1][1]));
+    const L=cum[cum.length-1]||1; pt=o.tm.map((t,i)=>[t,cum[i]/L]);
+  }else{
+    const L=Math.hypot(o.p[1][0]-o.p[0][0],o.p[1][1]-o.p[0][1])||1; let m=0;
+    pt=o.tr.map(([t,d])=>{ m=Math.max(m,Math.min(1,d/L)); return [t,m]; });
+  }
+  if(pt[pt.length-1][0]<tu) pt.push([tu,1]); else pt[pt.length-1][1]=1;
+  addAnn({type:o.type,p:o.p,rev:tu,pt});
 };
 cv.onpointercancel=()=>{ drawing=false; cur=null; redraw(); };
 document.querySelectorAll('#tools [data-t]').forEach(b=>b.onclick=()=>{
@@ -456,6 +485,12 @@ function applyLine(){
 }
 ['wid','opa','col'].forEach(id=>{ $('#'+id).addEventListener('input',applyLine); $('#'+id).addEventListener('change',applyLine); });
 
+/* 프리즈·애니메이션 설정: 선택한 그림/글자에 바로 적용 */
+function applyMode(){
+  anns.forEach(a=>{ if(selSet.has(a)){ a.an=$('#anOn').checked; a.fz=$('#fzOn').checked?+$('#fzt').value:0; if(a.el) place(a); } });
+}
+['fzOn','fzt','anOn'].forEach(id=>$('#'+id).addEventListener('change',applyMode));
+
 /* 글자 설정: 선택한 텍스트에 바로 적용 */
 function applyText(){
   $('#tfsv').textContent=$('#tfs').value;
@@ -474,7 +509,7 @@ const lab=a=>a.nm+(a.tx?': '+a.tx:'');
 function place(a){
   const dur=A.duration||1;
   a.el.style.left=a.s/dur*100+'%'; a.el.style.width=Math.max(a.d/dur*100,1.5)+'%';
-  a.el.textContent=lab(a)+' · '+a.d.toFixed(1)+'초';
+  a.el.textContent=lab(a)+' · '+a.d.toFixed(1)+'초'+(a.fz>0?' · ⏸'+a.fz+'초':'')+(a.an===false?' · 바로':'');
   a.el.title=lab(a)+' · '+a.s.toFixed(2)+'s ~ '+(a.s+a.d).toFixed(2)+'s';
 }
 function refreshSel(){
@@ -482,6 +517,7 @@ function refreshSel(){
   const one=anns.filter(a=>selSet.has(a));
   if(one.length===1&&one[0].type==='text'){ const a=one[0]; $('#tfs').value=a.fs; $('#tfw').value=a.fw; $('#tco').value=a.tc; $('#tfsv').textContent=a.fs; }
   if(lineEdit&&one.length===1&&one[0].type!=='text'){ const a=one[0]; $('#wid').value=a.w; $('#opa').value=Math.round((a.op==null?1:a.op)*100); $('#col').value=a.c; $('#widv').textContent=a.w; $('#opav').textContent=$('#opa').value+'%'; }
+  if(one.length===1){ const a=one[0]; $('#anOn').checked=a.an!==false; $('#fzOn').checked=a.fz>0; if(a.fz>0) $('#fzt').value=String(a.fz); }
   $('#pick').style.display='none';
   $('#fit').textContent='길이 맞추기'+(selSet.size>1?' ('+selSet.size+')':'');
 }
@@ -555,6 +591,23 @@ addEventListener('pointercancel',()=>{ sd.A=sd.B=false; });
         if(!v.paused&&v.currentTime>=tr(v).o){ v.pause(); v.currentTime=tr(v).o; }
       }
       setTxt('#play'+k,v.paused?'재생':'정지');
+    }
+    if(A.duration&&anns.length){
+      if(fzHold){
+        if(!A.paused||Math.abs(A.currentTime-fzHold.a.s)>.08) fzHold=null;
+        else if(performance.now()>=fzHold.until){
+          const h=fzHold; fzHold=null; const pr=A.play(); if(pr&&pr.catch) pr.catch(()=>{});
+          if(h.wasB&&!linkOn&&B.src){ const q=B.play(); if(q&&q.catch) q.catch(()=>{}); }
+        }
+      }else if(A.paused) fzDone.clear();
+      else{
+        for(const a of anns){
+          if(a.fz>0&&!fzDone.has(a)&&A.currentTime>=a.s-.001&&A.currentTime<a.s+.3&&a.s<tr(A).o-.05){
+            fzDone.add(a); const wasB=!!B.src&&!B.paused; A.pause(); A.currentTime=a.s; if(B.src) B.pause();
+            fzHold={a,start:performance.now(),until:performance.now()+(a.an===false?a.fz:Math.max(a.fz,(a.rev||0)+.5))*1000,wasB}; break;
+          }
+        }
+      }
     }
     if(!exporting&&linkOn&&syncActive()){
       const ta=A.currentTime, tb=mapB(ta), rB=tr(B);
